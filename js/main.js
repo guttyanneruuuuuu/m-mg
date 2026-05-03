@@ -1,5 +1,9 @@
 // ===========================================================
-// main.js — boots the game, owns the loop, ties modules together.
+// main.js — boots the game, owns the loop, ties modules.   (v2)
+//   - cinematic camera follow with shake / FOV / banking
+//   - time-slow on near-misses
+//   - missions / objectives system (rotating goals = endless variety)
+//   - improved boot sequence and adaptive renderer scaling
 // ===========================================================
 
 import * as THREE from 'three';
@@ -7,7 +11,6 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass }     from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass }from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass }     from 'three/addons/postprocessing/OutputPass.js';
-import { ShaderPass }     from 'three/addons/postprocessing/ShaderPass.js';
 
 import { InputManager } from './input.js';
 import { HandTracker }  from './hand.js';
@@ -15,9 +18,9 @@ import { World }        from './world.js';
 import { Player }       from './player.js';
 import { Effects }      from './effects.js';
 import { AudioEngine }  from './audio.js';
-import { clamp, damp, lerp, Storage, isMobile, supportsTouch } from './utils.js';
+import { clamp, damp, lerp, Storage, isMobile, supportsTouch, choose } from './utils.js';
 
-// =============== Boot screens ===============
+// =============== Element shortcuts ===============
 const $ = (id) => document.getElementById(id);
 
 const ui = {
@@ -55,6 +58,31 @@ const ui = {
   shieldOrbs: document.querySelectorAll('.shield-orb'),
 };
 
+// =============== Mission Banner (added dynamically) ===============
+const missionBanner = document.createElement('div');
+missionBanner.id = 'missionBanner';
+missionBanner.className = 'mission-banner hidden';
+missionBanner.innerHTML = `
+  <div class="mission-icon">🎯</div>
+  <div class="mission-text">
+    <div class="mission-label">MISSION</div>
+    <div class="mission-desc" id="missionDesc">—</div>
+    <div class="mission-bar"><div class="mission-bar-fill" id="missionBarFill"></div></div>
+  </div>
+  <div class="mission-progress" id="missionProgress">0 / 5</div>
+`;
+ui.hud.appendChild(missionBanner);
+const missionDesc  = $('missionDesc');
+const missionBarFill = $('missionBarFill');
+const missionProgress = $('missionProgress');
+
+// recalibrate button (shown only in hand mode)
+const recalBtn = document.createElement('button');
+recalBtn.id = 'btnRecal';
+recalBtn.className = 'hud-pill mini btn-pause hidden';
+recalBtn.textContent = '⟳ 再キャリブ';
+ui.hud.querySelector('.hud-bottom').appendChild(recalBtn);
+
 function setLoader(p, msg) {
   ui.loaderFill.style.width = (p * 100).toFixed(0) + '%';
   if (msg) ui.loaderStatus.textContent = msg;
@@ -64,18 +92,27 @@ function setLoader(p, msg) {
 const state = {
   running: false,
   paused: false,
-  mode: 'hand', // 'hand' | 'touch' | 'keyboard'
+  mode: 'hand',
   score: 0,
   combo: 1,
   comboTimer: 0,
   maxCombo: 1,
   best: Storage.load().best || 0,
+  bestScore: Storage.load().bestScore || 0,
   quality: Storage.load().quality || (isMobile() ? 'med' : 'high'),
   mouseSens: Storage.load().mouseSens || 1.0,
   handSens: Storage.load().handSens || 1.2,
   mirror: Storage.load().mirror !== false,
   bgmVol: Storage.load().bgmVol ?? 0.5,
   sfxVol: Storage.load().sfxVol ?? 0.7,
+
+  // missions
+  mission: null,           // { id, label, target, progress, kind, reward }
+  missionStreak: 0,
+
+  // effects
+  timeScale: 1.0,
+  timeScaleTarget: 1.0,
 };
 
 // =============== Three.js setup ===============
@@ -86,13 +123,12 @@ const renderer = new THREE.WebGLRenderer({
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, state.quality === 'high' ? 2 : 1.5));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.08;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 4000);
 camera.position.set(0, 4, 14);
 
-// post-processing
 let composer = null;
 let bloomPass = null;
 
@@ -100,15 +136,13 @@ function setupPost() {
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
 
-  const bs = state.quality === 'high' ? 0.85 : state.quality === 'med' ? 0.5 : 0.32;
+  const bs = state.quality === 'high' ? 0.95 : state.quality === 'med' ? 0.55 : 0.35;
   bloomPass = new UnrealBloomPass(
     new THREE.Vector2(window.innerWidth, window.innerHeight),
     bs, 0.7, 0.18
   );
   composer.addPass(bloomPass);
-
   composer.addPass(new OutputPass());
-
   resize();
 }
 
@@ -137,7 +171,7 @@ const handTracker = new HandTracker(input);
 
 let world, player, fx;
 
-// =============== Game flow ===============
+// =============== Boot ===============
 async function bootSequence() {
   setLoader(0.05, 'エンジンを起動中…');
   await new Promise(r => setTimeout(r, 200));
@@ -158,19 +192,83 @@ async function bootSequence() {
   ui.title.classList.remove('hidden');
   ui.hudBest.textContent = state.best;
 
-  // Start render loop (idle preview behind title)
   requestAnimationFrame(loop);
 }
 
+// =============== Missions ===============
+const MISSION_TEMPLATES = [
+  { kind: 'rings',    target: 5,  label: 'リングを {n} 個くぐれ',    reward: 1000 },
+  { kind: 'rings',    target: 10, label: 'リングを {n} 個くぐれ',    reward: 2500 },
+  { kind: 'crystals', target: 15, label: '結晶を {n} 個集めよ',     reward: 1500 },
+  { kind: 'crystals', target: 25, label: '結晶を {n} 個集めよ',     reward: 3000 },
+  { kind: 'distance', target: 1500, label: '{n} m 飛行せよ',        reward: 2000 },
+  { kind: 'combo',    target: 10, label: 'コンボ x{n} を達成',      reward: 2500 },
+  { kind: 'boost',    target: 12, label: 'ブーストで {n} 秒飛行',   reward: 2000 },
+  { kind: 'noHit',    target: 800, label: '無傷で {n} m 飛行',      reward: 3500 }
+];
+
+function pickMission() {
+  const tpl = choose(MISSION_TEMPLATES);
+  return {
+    kind: tpl.kind,
+    target: tpl.target,
+    progress: 0,
+    label: tpl.label.replace('{n}', tpl.target),
+    reward: tpl.reward,
+    startPos: player ? player.pos.z : 0,
+    startedAt: performance.now() / 1000
+  };
+}
+
+function setMission(m) {
+  state.mission = m;
+  missionDesc.textContent = m.label;
+  missionProgress.textContent = `0 / ${m.target}`;
+  missionBarFill.style.width = '0%';
+  missionBanner.classList.remove('hidden');
+  missionBanner.classList.remove('done');
+  flashMsg('NEW MISSION');
+}
+
+function progressMission(deltaProgress) {
+  if (!state.mission) return;
+  state.mission.progress += deltaProgress;
+  const m = state.mission;
+  const p = clamp(m.progress / m.target, 0, 1);
+  missionBarFill.style.width = (p * 100).toFixed(0) + '%';
+  missionProgress.textContent = `${Math.floor(m.progress).toLocaleString()} / ${m.target.toLocaleString()}`;
+  if (m.progress >= m.target) {
+    addScore(m.reward, false);
+    missionBanner.classList.add('done');
+    flashMsg(`MISSION CLEAR  +${m.reward}`);
+    audio.combo(5);
+    state.missionStreak++;
+    setTimeout(() => setMission(pickMission()), 1500);
+  }
+}
+
+// =============== Game flow ===============
 function startGame(mode) {
   state.mode = mode;
   input.setMode(mode);
-  // reset
   state.score = 0;
   state.combo = 1; state.maxCombo = 1; state.comboTimer = 0;
-  // recreate fresh world+player to ensure clean state
-  if (player) scene.remove(player.root);
-  if (world)  { for (const c of world.chunks) world._disposeChunk(c); world.chunks = []; world.spawnZ = 0; world.travelled = 0; }
+  state.missionStreak = 0;
+  state.timeScale = 1; state.timeScaleTarget = 1;
+
+  if (player) {
+    // dispose old trails
+    for (const t of player.trails || []) {
+      scene.remove(t.line);
+      t.line.geometry.dispose();
+      t.line.material.dispose();
+    }
+    scene.remove(player.root);
+  }
+  if (world) {
+    for (const c of world.chunks) world._disposeChunk(c);
+    world.chunks = []; world.spawnZ = 0; world.travelled = 0;
+  }
   player = new Player(scene);
   fx = new Effects(scene);
   world.prime();
@@ -180,10 +278,12 @@ function startGame(mode) {
   ui.pause.classList.add('hidden');
   ui.hud.classList.remove('hidden');
   ui.modePill.textContent = `MODE: ${mode === 'hand' ? 'HAND' : mode === 'touch' ? 'TOUCH' : 'KEYBOARD'}`;
-  // toggle mode-specific UI
   ui.camPreview.classList.toggle('hidden', mode !== 'hand');
   ui.touchUI.classList.toggle('hidden',   mode !== 'touch');
+  recalBtn.classList.toggle('hidden', mode !== 'hand');
   updateShieldUI();
+
+  setMission(pickMission());
 
   state.running = true;
   state.paused = false;
@@ -191,16 +291,23 @@ function startGame(mode) {
 
   if (mode === 'hand') {
     handTracker.start().catch(err => {
-      console.warn('hand failed, falling back to touch', err);
-      flashMsg('ハンド起動失敗 — タッチに切替');
-      input.setMode(supportsTouch() ? 'touch' : 'keyboard');
-      state.mode = supportsTouch() ? 'touch' : 'keyboard';
-      ui.modePill.textContent = `MODE: ${state.mode.toUpperCase()}`;
+      console.warn('hand failed, falling back', err);
+      flashMsg('ハンド起動失敗 — フォールバック');
+      const fb = supportsTouch() ? 'touch' : 'keyboard';
+      input.setMode(fb);
+      state.mode = fb;
+      ui.modePill.textContent = `MODE: ${fb.toUpperCase()}`;
       ui.camPreview.classList.add('hidden');
-      ui.touchUI.classList.toggle('hidden', state.mode !== 'touch');
+      ui.touchUI.classList.toggle('hidden', fb !== 'touch');
+      recalBtn.classList.add('hidden');
     });
   } else {
     handTracker.stop();
+    if (mode === 'touch' && isMobile()) {
+      input.requestTiltPermission().then(granted => {
+        input.tiltAssist = granted; // gentle tilt assist
+      });
+    }
   }
 }
 
@@ -208,15 +315,16 @@ function endGame() {
   state.running = false;
   audio.gameover();
   audio.stopMusic();
-  // best
   const dist = Math.max(0, Math.floor(-player.pos.z));
   if (dist > state.best) { state.best = dist; Storage.patch({ best: dist }); }
+  if (state.score > state.bestScore) { state.bestScore = state.score; Storage.patch({ bestScore: state.score }); }
   ui.goScore.textContent = state.score.toLocaleString();
   ui.goDist.textContent  = dist.toLocaleString() + ' m';
   ui.goCombo.textContent = 'x' + state.maxCombo;
   ui.hudBest.textContent = state.best;
   setTimeout(() => ui.gameover.classList.remove('hidden'), 700);
   handTracker.stop();
+  recalBtn.classList.add('hidden');
 }
 
 function quitToTitle() {
@@ -227,6 +335,7 @@ function quitToTitle() {
   ui.gameover.classList.add('hidden');
   ui.pause.classList.add('hidden');
   ui.title.classList.remove('hidden');
+  recalBtn.classList.add('hidden');
 }
 
 // =============== UI bindings ===============
@@ -235,7 +344,6 @@ $('btnTouchMode').addEventListener('click', () => startGame(supportsTouch() ? 't
 $('btnHowto').addEventListener('click', () => ui.howto.classList.remove('hidden'));
 $('btnHowtoClose').addEventListener('click', () => ui.howto.classList.add('hidden'));
 $('btnSettings').addEventListener('click', () => {
-  // reflect current values
   $('setQuality').value = state.quality;
   $('setMouseSens').value = state.mouseSens;
   $('setHandSens').value = state.handSens;
@@ -252,21 +360,16 @@ $('btnSettingsClose').addEventListener('click', () => {
   state.bgmVol    = parseFloat($('setBgm').value);
   state.sfxVol    = parseFloat($('setSfx').value);
   Storage.patch({
-    quality: state.quality,
-    mouseSens: state.mouseSens,
-    handSens: state.handSens,
-    mirror: state.mirror,
-    bgmVol: state.bgmVol,
-    sfxVol: state.sfxVol
+    quality: state.quality, mouseSens: state.mouseSens, handSens: state.handSens,
+    mirror: state.mirror, bgmVol: state.bgmVol, sfxVol: state.sfxVol
   });
   input.mouseSens = state.mouseSens;
-  input.handSens = state.handSens;
-  input.mirror = state.mirror;
+  input.handSens  = state.handSens;
+  input.mirror    = state.mirror;
   audio.setBgm(state.bgmVol);
   audio.setSfx(state.sfxVol);
-  // bloom update
   if (bloomPass) {
-    const bs = state.quality === 'high' ? 0.85 : state.quality === 'med' ? 0.5 : 0.32;
+    const bs = state.quality === 'high' ? 0.95 : state.quality === 'med' ? 0.55 : 0.35;
     bloomPass.strength = bs;
   }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, state.quality === 'high' ? 2 : 1.5));
@@ -289,14 +392,15 @@ $('btnQuit').addEventListener('click', quitToTitle);
 $('btnRetry').addEventListener('click', () => startGame(state.mode));
 $('btnGoTitle').addEventListener('click', quitToTitle);
 
-// keyboard shortcuts
+recalBtn.addEventListener('click', () => {
+  handTracker.recalibrate();
+  flashMsg('再キャリブ中…');
+});
+
 window.addEventListener('keydown', e => {
   if (e.code === 'Escape') {
-    if (state.running && !ui.pause.classList.contains('hidden')) {
-      $('btnResume').click();
-    } else if (state.running) {
-      $('btnPause').click();
-    }
+    if (state.running && !ui.pause.classList.contains('hidden')) $('btnResume').click();
+    else if (state.running) $('btnPause').click();
   }
 });
 
@@ -329,27 +433,34 @@ function damageFlash() {
   ui.damageFlash.classList.add('hit');
 }
 
-// =============== Camera follow ===============
-const camOffset = new THREE.Vector3(0, 3.4, 11);
-const camLookAhead = new THREE.Vector3(0, 1.0, -14);
+// =============== Camera follow (banking, smooth) ===============
+const camOffset = new THREE.Vector3(0, 3.6, 12);
+const camLookAhead = new THREE.Vector3(0, 1.2, -16);
 const _tmp = new THREE.Vector3();
 const _tmp2 = new THREE.Vector3();
 let camShake = 0;
+let camRollSmooth = 0;
 
 function updateCamera(dt) {
   if (!player) return;
-  // local follow position behind ship
+  // follow position behind ship
   _tmp.copy(camOffset).applyQuaternion(player.root.quaternion).add(player.root.position);
-  // smooth
-  camera.position.lerp(_tmp, 1 - Math.exp(-7 * dt));
+  // smooth (faster catch up at high speed)
+  const speedNorm = clamp((player.speed - player.minSpeed) / (player.maxSpeed - player.minSpeed), 0, 1);
+  const followL = lerp(6.5, 9.5, speedNorm);
+  camera.position.lerp(_tmp, 1 - Math.exp(-followL * dt));
 
   // look ahead point
   _tmp2.copy(camLookAhead).applyQuaternion(player.root.quaternion).add(player.root.position);
   camera.lookAt(_tmp2);
 
+  // bank camera slightly with player roll for cinematic feel
+  const targetRoll = player.rollVisual * 0.45;
+  camRollSmooth = damp(camRollSmooth, targetRoll, 5, dt);
+  camera.rotation.z += camRollSmooth;
+
   // FOV with speed
-  const sNorm = clamp((player.speed - player.minSpeed) / (player.maxSpeed - player.minSpeed), 0, 1);
-  const targetFov = 70 + sNorm * 20 + (player.boostActive ? 6 : 0);
+  const targetFov = 70 + speedNorm * 22 + (player.boostActive ? 8 : 0);
   camera.fov = damp(camera.fov, targetFov, 4, dt);
   camera.updateProjectionMatrix();
 
@@ -368,26 +479,27 @@ const _wp = new THREE.Vector3();
 function processCollisions(dt) {
   if (!player.alive) return;
   const playerPos = player.pos;
-  const near = world.gatherNear(playerPos.z, 220);
+  const near = world.gatherNear(playerPos.z, 240);
+
+  // detect near misses with hazards (for time-slow effect)
+  let nearMiss = false;
 
   for (const item of near.rings) {
     _wp.copy(item.parent.position).add(item.obj.position);
     const dz = _wp.z - playerPos.z;
-    // rings give bonus when player flies through
     if (dz > -2 && dz < 6) {
-      // check radial distance projected onto plane (XY)
       const dx = _wp.x - playerPos.x;
       const dy = _wp.y - playerPos.y;
       const r = Math.hypot(dx, dy);
       if (r < item.obj.userData.radius * 0.85) {
-        // perfect-pass bonus if very close to center
-        const bonus = r < item.obj.userData.radius * 0.35 ? 500 : 250;
-        addScore(bonus, /*combo*/ true);
-        flashMsg(r < item.obj.userData.radius * 0.35 ? 'PERFECT!' : 'RING!');
+        const perfect = r < item.obj.userData.radius * 0.35;
+        const bonus = perfect ? 500 : 250;
+        addScore(bonus, true);
+        flashMsg(perfect ? 'PERFECT!' : 'RING!');
         fx.spawnRing(_wp.clone());
         audio.ringPass();
-        // small boost
-        player.speed = clamp(player.speed + 30, player.minSpeed, player.maxSpeed);
+        player.speed = clamp(player.speed + 32, player.minSpeed, player.maxSpeed);
+        if (state.mission?.kind === 'rings') progressMission(1);
         item.obj.userData.alive = false;
         item.parent.remove(item.obj);
       }
@@ -395,10 +507,11 @@ function processCollisions(dt) {
   }
   for (const item of near.crystals) {
     _wp.copy(item.parent.position).add(item.obj.position);
-    if (_wp.distanceTo(playerPos) < 3.4) {
+    if (_wp.distanceTo(playerPos) < 3.6) {
       addScore(120, true);
       fx.spawnPickup(_wp.clone(), 0xff6ec7);
       audio.pickup();
+      if (state.mission?.kind === 'crystals') progressMission(1);
       item.obj.userData.alive = false;
       item.parent.remove(item.obj);
     }
@@ -406,21 +519,36 @@ function processCollisions(dt) {
   for (const item of near.hazards) {
     _wp.copy(item.parent.position).add(item.obj.position);
     const r = item.obj.userData.radius * 0.9 + 1.6;
-    if (_wp.distanceTo(playerPos) < r) {
+    const d = _wp.distanceTo(playerPos);
+    if (d < r) {
       const took = player.damage();
       if (took) {
-        camShake = 0.6;
+        camShake = 0.7;
         damageFlash();
         fx.spawnHit(playerPos.clone());
         audio.hit();
         updateShieldUI();
         breakCombo();
+        if (state.mission?.kind === 'noHit') {
+          // reset noHit progress
+          state.mission.progress = 0;
+          state.mission.startPos = player.pos.z;
+          missionBarFill.style.width = '0%';
+          missionProgress.textContent = `0 / ${state.mission.target.toLocaleString()}`;
+        }
         if (!player.alive) endGame();
       }
-      // remove hazard so we don't double-hit
       item.obj.userData.alive = false;
       item.parent.remove(item.obj);
+    } else if (d < r * 2.4 && Math.abs(_wp.z - playerPos.z) < 8) {
+      nearMiss = true;
     }
+  }
+
+  // time-slow on near miss for 0.4s
+  if (nearMiss) {
+    state.timeScaleTarget = 0.55;
+    setTimeout(() => state.timeScaleTarget = 1, 350);
   }
 }
 
@@ -436,6 +564,13 @@ function addScore(base, combo) {
       flashCombo(state.combo);
       audio.combo(Math.floor(state.combo / 5));
     }
+    if (state.mission?.kind === 'combo' && state.combo > state.mission.progress) {
+      state.mission.progress = state.combo;
+      const p = clamp(state.combo / state.mission.target, 0, 1);
+      missionBarFill.style.width = (p * 100).toFixed(0) + '%';
+      missionProgress.textContent = `${state.combo} / ${state.mission.target}`;
+      if (state.combo >= state.mission.target) progressMission(0);
+    }
   }
 }
 function breakCombo() {
@@ -445,25 +580,47 @@ function breakCombo() {
 
 // =============== HUD ===============
 let fpsAcc = 0, fpsFrames = 0;
+let _lastDistMission = 0;
 function updateHud(dt) {
   ui.hudScore.textContent = state.score.toLocaleString();
   ui.hudCombo.textContent = 'x' + state.combo;
   ui.hudSpeed.textContent = String(Math.floor(player.speed * 1.6)).padStart(3, '0');
   ui.hudDist.textContent  = Math.max(0, Math.floor(-player.pos.z)).toLocaleString();
 
-  // shield
-  // (updated in event)
-
-  // boost ring
   const off = (1 - player.boostFuel) * 289;
   ui.boostRing.setAttribute('stroke-dashoffset', off.toFixed(1));
   ui.boostRing.setAttribute('stroke', player.boostActive ? '#ff6ec7' : '#7df9ff');
 
-  // speed lines
   const sNorm = clamp((player.speed - player.minSpeed) / (player.maxSpeed - player.minSpeed), 0, 1);
   ui.speedLines.classList.toggle('boost', sNorm > 0.7 || player.boostActive);
 
-  // fps
+  // mission distance / boost progress
+  if (state.mission) {
+    const m = state.mission;
+    const dist = -player.pos.z - (m.startPos || 0);
+    if (m.kind === 'distance' && dist > m.progress) {
+      m.progress = Math.floor(dist);
+      const p = clamp(m.progress / m.target, 0, 1);
+      missionBarFill.style.width = (p * 100).toFixed(0) + '%';
+      missionProgress.textContent = `${m.progress.toLocaleString()} / ${m.target.toLocaleString()} m`;
+      if (m.progress >= m.target) progressMission(0);
+    } else if (m.kind === 'noHit') {
+      m.progress = Math.max(0, Math.floor(dist));
+      const p = clamp(m.progress / m.target, 0, 1);
+      missionBarFill.style.width = (p * 100).toFixed(0) + '%';
+      missionProgress.textContent = `${m.progress.toLocaleString()} / ${m.target.toLocaleString()} m`;
+      if (m.progress >= m.target) progressMission(0);
+    } else if (m.kind === 'boost') {
+      if (player.boostActive) {
+        m.progress += dt;
+        const p = clamp(m.progress / m.target, 0, 1);
+        missionBarFill.style.width = (p * 100).toFixed(0) + '%';
+        missionProgress.textContent = `${m.progress.toFixed(1)} / ${m.target} s`;
+        if (m.progress >= m.target) progressMission(0);
+      }
+    }
+  }
+
   fpsAcc += dt; fpsFrames++;
   if (fpsAcc > 0.5) {
     const fps = fpsFrames / fpsAcc;
@@ -477,13 +634,16 @@ let last = performance.now();
 function loop() {
   requestAnimationFrame(loop);
   const now = performance.now();
-  let dt = (now - last) / 1000;
+  let rawDt = (now - last) / 1000;
   last = now;
-  if (dt > 0.1) dt = 0.1;
+  if (rawDt > 0.1) rawDt = 0.1;
   const time = now / 1000;
 
-  // input always updates so menus feel alive
-  input.update(dt);
+  // smooth time scale (for near-miss time-slow effect)
+  state.timeScale = damp(state.timeScale, state.timeScaleTarget, 8, rawDt);
+  const dt = rawDt * state.timeScale;
+
+  input.update(rawDt); // input always real-time
 
   if (state.running && !state.paused) {
     player.update(dt, input, time);
@@ -491,30 +651,27 @@ function loop() {
     processCollisions(dt);
     fx.update(dt);
 
-    // combo timer
     if (state.comboTimer > 0) {
       state.comboTimer -= dt;
       if (state.comboTimer <= 0) breakCombo();
     }
-    updateHud(dt);
+    updateHud(rawDt);
   } else if (world && player) {
-    // idle — slowly drift player & world for cinematic title
-    player.root.rotation.y += dt * 0.04;
-    fx?.update(dt);
-    world.update(dt, time, player.pos.z);
+    // idle title scene
+    player.root.rotation.y += rawDt * 0.04;
+    fx?.update(rawDt);
+    world.update(rawDt, time, player.pos.z);
   }
 
-  updateCamera(dt);
+  updateCamera(rawDt);
 
   if (composer) composer.render();
   else renderer.render(scene, camera);
 }
 
-// =============== KICK OFF ===============
 bootSequence().catch(err => {
   console.error(err);
   ui.loaderStatus.textContent = '初期化エラー: ' + (err?.message || err);
 });
 
-// expose for debugging
 window.__SKYRIFT__ = { state, input, audio, scene, camera, renderer };

@@ -1,8 +1,10 @@
 // ===========================================================
-// world.js — procedural infinite sky world.
-//   - Sky / sun / atmosphere
+// world.js — procedural infinite sky world.   (v2)
+//   - Sky / sun / atmosphere shader
+//   - Volumetric-ish layered clouds
 //   - Floating islands (smooth Genshin-like aesthetic, NOT cubic)
-//   - Star clouds, far mountains, ocean, light shafts
+//   - Star clouds, pickup rings, crystals, hazards
+//   - Light shafts streaming through clouds
 // ===========================================================
 
 import * as THREE from 'three';
@@ -12,7 +14,8 @@ const ISLAND_PALETTES = [
   { rock: 0x6f5b8d, grass: 0x65d394, glow: 0x7df9ff, accent: 0xb388ff }, // dawn lavender
   { rock: 0x8b6f4e, grass: 0x9cd86a, glow: 0xffd86b, accent: 0xff9b6e }, // sunset
   { rock: 0x4a5d8c, grass: 0x60c0d4, glow: 0x7df9ff, accent: 0x6ec0ff }, // azure
-  { rock: 0x6e4b6e, grass: 0xff95c8, glow: 0xff6ec7, accent: 0xb388ff }  // sakura
+  { rock: 0x6e4b6e, grass: 0xff95c8, glow: 0xff6ec7, accent: 0xb388ff }, // sakura
+  { rock: 0x3a4a6e, grass: 0x8ad8ff, glow: 0xc4b5ff, accent: 0xffffff }  // arctic dream
 ];
 
 export class World {
@@ -20,29 +23,26 @@ export class World {
     this.scene = scene;
     this.quality = quality;
 
-    // ----- root containers -----
     this.root = new THREE.Group();
     this.scene.add(this.root);
 
-    // chunks queue (each chunk is a Group)
     this.chunks = [];
-    this.chunkLength = 220;     // world units
+    this.chunkLength = 220;
     this.aheadChunks = quality === 'high' ? 8 : quality === 'med' ? 6 : 5;
     this.behindChunks = 1;
-    this.spawnZ = 0;            // next chunk z
+    this.spawnZ = 0;
     this.travelled = 0;
 
-    // setup environment
     this._setupSky();
     this._setupLights();
     this._setupOcean();
+    this._setupClouds();
     this._setupStars();
   }
 
   // -----------------------------------------------------------
   _setupSky() {
-    // Big gradient sphere
-    const geo = new THREE.SphereGeometry(2200, 32, 16);
+    const geo = new THREE.SphereGeometry(2400, 48, 24);
     const mat = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       depthWrite: false,
@@ -55,13 +55,10 @@ export class World {
         time:     { value: 0 }
       },
       vertexShader: `
-        varying vec3 vWorld;
         varying vec3 vN;
         void main(){
-          vec4 wp = modelMatrix * vec4(position, 1.0);
-          vWorld = wp.xyz;
           vN = normalize(position);
-          gl_Position = projectionMatrix * viewMatrix * wp;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
       fragmentShader: `
@@ -76,12 +73,12 @@ export class World {
           float h = clamp((vN.y + 0.2) * 0.7, 0.0, 1.0);
           vec3 col = mix(botColor, midColor, smoothstep(0.0, 0.5, h));
           col = mix(col, topColor, smoothstep(0.45, 1.0, h));
-          // sun
           float sd = max(dot(vN, sunDir), 0.0);
-          col += sunColor * pow(sd, 320.0) * 1.6;       // sun disk
-          col += sunColor * pow(sd, 8.0) * 0.18;         // soft halo
-          // subtle banding
-          col += 0.025 * sin(vN.y * 60.0 + time * 0.05);
+          col += sunColor * pow(sd, 320.0) * 1.8;
+          col += sunColor * pow(sd, 8.0) * 0.22;
+          // aurora-ish bands
+          float band = sin((vN.y + time * 0.02) * 30.0) * 0.5 + 0.5;
+          col += vec3(0.05, 0.10, 0.18) * band * smoothstep(0.4, 0.9, h);
           gl_FragColor = vec4(col, 1.0);
         }
       `
@@ -90,28 +87,30 @@ export class World {
     this.sky.frustumCulled = false;
     this.scene.add(this.sky);
 
-    // fog gives depth
-    this.scene.fog = new THREE.FogExp2(0xa48fff, 0.0017);
+    this.scene.fog = new THREE.FogExp2(0xa48fff, 0.0016);
   }
 
   _setupLights() {
-    const hemi = new THREE.HemisphereLight(0xc0d6ff, 0xff9fb8, 0.85);
+    const hemi = new THREE.HemisphereLight(0xc0d6ff, 0xff9fb8, 0.95);
     this.scene.add(hemi);
 
-    const dir = new THREE.DirectionalLight(0xfff2cc, 1.2);
+    const dir = new THREE.DirectionalLight(0xfff2cc, 1.4);
     dir.position.set(80, 130, -60);
     this.scene.add(dir);
     this.sunLight = dir;
 
-    // rim accent
-    const fill = new THREE.DirectionalLight(0x7df9ff, 0.45);
+    const fill = new THREE.DirectionalLight(0x7df9ff, 0.55);
     fill.position.set(-60, 30, 60);
     this.scene.add(fill);
+
+    // accent rim
+    const rim = new THREE.DirectionalLight(0xff6ec7, 0.25);
+    rim.position.set(20, -40, 100);
+    this.scene.add(rim);
   }
 
   _setupOcean() {
-    // Far stylized "sea of clouds" plane below
-    const geo = new THREE.PlaneGeometry(6000, 6000, 60, 60);
+    const geo = new THREE.PlaneGeometry(7000, 7000, 80, 80);
     const mat = new THREE.ShaderMaterial({
       transparent: true,
       uniforms: {
@@ -127,8 +126,9 @@ export class World {
         void main(){
           vUv = uv;
           vec3 p = position;
-          float w = sin(p.x*0.012 + time*0.4) * cos(p.y*0.014 + time*0.3) * 18.0
-                  + sin(p.x*0.04 + time*0.9) * 4.0;
+          float w = sin(p.x*0.012 + time*0.4) * cos(p.y*0.014 + time*0.3) * 22.0
+                  + sin(p.x*0.04 + time*0.9) * 5.0
+                  + cos(p.y*0.03 + time*0.6) * 4.0;
           p.z += w;
           vH = w;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(p,1.0);
@@ -140,43 +140,102 @@ export class World {
         varying float vH;
         void main(){
           vec3 col = mix(c1, c2, vUv.y);
-          col = mix(col, c3, smoothstep(-15.0, 20.0, vH) * 0.55);
-          float a = 0.55 + 0.25 * smoothstep(-15.0, 22.0, vH);
+          col = mix(col, c3, smoothstep(-15.0, 22.0, vH) * 0.6);
+          float a = 0.55 + 0.30 * smoothstep(-15.0, 26.0, vH);
           gl_FragColor = vec4(col, a);
         }
       `
     });
     const m = new THREE.Mesh(geo, mat);
     m.rotation.x = -Math.PI / 2;
-    m.position.y = -120;
+    m.position.y = -130;
     m.frustumCulled = false;
     this.scene.add(m);
     this.ocean = m;
   }
 
+  _setupClouds() {
+    // Soft puffy clouds as billboards. 3 layers for parallax depth.
+    const tex = this._makeCloudTexture();
+    this.cloudLayers = [];
+    const counts = this.quality === 'high' ? [40, 30, 20] : this.quality === 'med' ? [28, 22, 14] : [18, 14, 8];
+    const distances = [180, 320, 520];
+    const sizes = [40, 70, 120];
+
+    for (let layer = 0; layer < 3; layer++) {
+      const grp = new THREE.Group();
+      for (let i = 0; i < counts[layer]; i++) {
+        const m = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: tex,
+          color: new THREE.Color().setHSL(rand(0.7, 0.95), 0.4, rand(0.7, 0.95)),
+          transparent: true,
+          depthWrite: false,
+          opacity: rand(0.45, 0.9),
+          blending: THREE.NormalBlending
+        }));
+        const a = rand(0, Math.PI * 2);
+        const r = rand(distances[layer] * 0.4, distances[layer]);
+        m.position.set(Math.cos(a) * r, rand(-30, 60), Math.sin(a) * r);
+        const s = rand(sizes[layer] * 0.7, sizes[layer]);
+        m.scale.set(s, s * 0.5, 1);
+        grp.add(m);
+      }
+      this.scene.add(grp);
+      this.cloudLayers.push({ grp, parallax: 0.4 + layer * 0.25 });
+    }
+  }
+
+  _makeCloudTexture() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 256;
+    const g = c.getContext('2d');
+    // soft radial gradient with slight noise
+    const grd = g.createRadialGradient(128, 128, 10, 128, 128, 128);
+    grd.addColorStop(0,   'rgba(255,255,255,1)');
+    grd.addColorStop(0.4, 'rgba(255,255,255,0.7)');
+    grd.addColorStop(0.7, 'rgba(255,255,255,0.25)');
+    grd.addColorStop(1,   'rgba(255,255,255,0)');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 256, 256);
+    // splotch pattern for organic shape
+    g.globalAlpha = 0.5;
+    for (let i = 0; i < 25; i++) {
+      const x = 128 + (Math.random() - 0.5) * 120;
+      const y = 128 + (Math.random() - 0.5) * 60;
+      const r = 30 + Math.random() * 40;
+      const g2 = g.createRadialGradient(x, y, 0, x, y, r);
+      g2.addColorStop(0, 'rgba(255,255,255,0.9)');
+      g2.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = g2;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+
   _setupStars() {
-    // Distant glowing particles like fireflies / stardust
-    const COUNT = this.quality === 'high' ? 800 : this.quality === 'med' ? 500 : 300;
+    const COUNT = this.quality === 'high' ? 900 : this.quality === 'med' ? 550 : 320;
     const positions = new Float32Array(COUNT * 3);
     const colors    = new Float32Array(COUNT * 3);
     for (let i = 0; i < COUNT; i++) {
-      const r = 600 + Math.random() * 800;
+      const r = 700 + Math.random() * 900;
       const a = Math.random() * Math.PI * 2;
       const b = (Math.random() - 0.5) * Math.PI * 0.6;
       positions[i * 3 + 0] = Math.cos(a) * Math.cos(b) * r;
-      positions[i * 3 + 1] = Math.sin(b) * r * 0.6 + 80;
+      positions[i * 3 + 1] = Math.sin(b) * r * 0.6 + 100;
       positions[i * 3 + 2] = Math.sin(a) * Math.cos(b) * r;
-      const c = new THREE.Color().setHSL(rand(0.5, 0.85), 0.7, 0.7);
+      const c = new THREE.Color().setHSL(rand(0.5, 0.9), 0.7, 0.75);
       colors[i*3+0] = c.r; colors[i*3+1] = c.g; colors[i*3+2] = c.b;
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
     const mat = new THREE.PointsMaterial({
-      size: 4.2, sizeAttenuation: true,
+      size: 4.4, sizeAttenuation: true,
       vertexColors: true, transparent: true,
       depthWrite: false, blending: THREE.AdditiveBlending,
-      map: this._makeSpriteTexture(), opacity: 0.9
+      map: this._makeSpriteTexture(), opacity: 0.95
     });
     this.stars = new THREE.Points(geo, mat);
     this.stars.frustumCulled = false;
@@ -199,10 +258,9 @@ export class World {
   }
 
   // -----------------------------------------------------------
-  // CHUNK GENERATION
+  // CHUNKS
   // -----------------------------------------------------------
   prime() {
-    // pre-spawn enough chunks ahead to cover the player's view
     for (let i = 0; i < this.aheadChunks; i++) this._spawnChunk();
   }
 
@@ -210,18 +268,11 @@ export class World {
     const z = this.spawnZ - this.chunkLength;
     const chunk = new THREE.Group();
     chunk.position.z = z;
-    chunk.userData = {
-      z,
-      pickups: [],
-      hazards: [],
-      rings: [],
-      crystals: []
-    };
+    chunk.userData = { z, pickups: [], hazards: [], rings: [], crystals: [] };
 
     const palette = choose(ISLAND_PALETTES);
     const variation = (this.travelled + Math.abs(z)) / 5000;
 
-    // 2..4 islands per chunk in different lateral lanes
     const n = randInt(2, 4);
     for (let i = 0; i < n; i++) {
       const x = rand(-90, 90);
@@ -230,33 +281,30 @@ export class World {
       this._spawnIsland(chunk, x, y, lz, palette, variation);
     }
 
-    // rings: spawn 3..5 along the path
     const rings = randInt(3, 5);
     for (let i = 0; i < rings; i++) {
       const t = (i + rand(0.1, 0.9)) / rings;
       const lz = -t * this.chunkLength;
-      const lx = Math.sin((Math.abs(z) * 0.002) + i * 1.7) * 35;
-      const ly = Math.cos((Math.abs(z) * 0.003) + i * 2.3) * 20 + 8;
+      const lx = Math.sin((Math.abs(z) * 0.002) + i * 1.7) * 38;
+      const ly = Math.cos((Math.abs(z) * 0.003) + i * 2.3) * 22 + 8;
       this._spawnRing(chunk, lx, ly, lz);
     }
 
-    // crystals (smaller pickups), more numerous
-    const crystals = randInt(6, 10);
+    const crystals = randInt(6, 11);
     for (let i = 0; i < crystals; i++) {
       const t = (i + rand(0.05, 0.95)) / crystals;
       const lz = -t * this.chunkLength;
-      const lx = rand(-60, 60);
-      const ly = rand(-20, 35);
+      const lx = rand(-65, 65);
+      const ly = rand(-22, 38);
       this._spawnCrystal(chunk, lx, ly, lz);
     }
 
-    // hazards: storm clouds / asteroids — increase with travelled
     const hazardChance = clamp(0.25 + variation * 0.3, 0.25, 0.85);
     const haz = randInt(1, 3 + Math.floor(variation * 2));
     for (let i = 0; i < haz; i++) {
       if (Math.random() > hazardChance) continue;
-      const lx = rand(-70, 70);
-      const ly = rand(-15, 30);
+      const lx = rand(-72, 72);
+      const ly = rand(-15, 32);
       const lz = rand(-this.chunkLength + 10, -10);
       if (Math.random() < 0.55) this._spawnStorm(chunk, lx, ly, lz);
       else this._spawnRock(chunk, lx, ly, lz);
@@ -267,13 +315,11 @@ export class World {
     this.spawnZ = z;
   }
 
-  // ---------- Smooth island (low-poly but rounded, NOT cubic) ----------
   _spawnIsland(parent, x, y, z, palette, variation) {
     const grp = new THREE.Group();
     grp.position.set(x, y, z);
     grp.rotation.y = rand(0, Math.PI * 2);
 
-    // base rock (rounded blob using IcosahedronGeometry + noise)
     const radius = rand(8, 16);
     const baseGeo = new THREE.IcosahedronGeometry(radius, this.quality === 'high' ? 3 : 2);
     const pos = baseGeo.attributes.position;
@@ -282,36 +328,30 @@ export class World {
       v.fromBufferAttribute(pos, i);
       const n = (Math.sin(v.x * 0.4) + Math.cos(v.z * 0.5) + Math.sin(v.y * 0.6)) * 0.6;
       v.multiplyScalar(1 + n * 0.06);
-      // squash bottom into a teardrop
       if (v.y < 0) v.y *= 1.5 + Math.random() * 0.5;
       pos.setXYZ(i, v.x, v.y, v.z);
     }
     baseGeo.computeVertexNormals();
 
     const rockMat = new THREE.MeshStandardMaterial({
-      color: palette.rock,
-      roughness: 0.85, metalness: 0.05,
-      flatShading: false
+      color: palette.rock, roughness: 0.85, metalness: 0.05, flatShading: false
     });
     const base = new THREE.Mesh(baseGeo, rockMat);
-    base.castShadow = false;
     grp.add(base);
 
-    // grassy top cap
-    const capGeo = new THREE.SphereGeometry(radius * 0.95, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.5);
+    const capGeo = new THREE.SphereGeometry(radius * 0.95, 28, 16, 0, Math.PI * 2, 0, Math.PI * 0.5);
     const capMat = new THREE.MeshStandardMaterial({
       color: palette.grass, roughness: 0.7, metalness: 0.0,
-      emissive: new THREE.Color(palette.grass).multiplyScalar(0.05)
+      emissive: new THREE.Color(palette.grass).multiplyScalar(0.06)
     });
     const cap = new THREE.Mesh(capGeo, capMat);
     cap.position.y = radius * 0.05;
     cap.scale.set(1.02, 0.55, 1.02);
     grp.add(cap);
 
-    // glow ring underneath (magic floating effect)
-    const ringGeo = new THREE.TorusGeometry(radius * 1.2, 0.4, 12, 48);
+    const ringGeo = new THREE.TorusGeometry(radius * 1.2, 0.4, 12, 56);
     const ringMat = new THREE.MeshBasicMaterial({
-      color: palette.glow, transparent: true, opacity: 0.45,
+      color: palette.glow, transparent: true, opacity: 0.5,
       blending: THREE.AdditiveBlending, depthWrite: false
     });
     const ring = new THREE.Mesh(ringGeo, ringMat);
@@ -319,14 +359,13 @@ export class World {
     ring.position.y = -radius * 0.6;
     grp.add(ring);
 
-    // add some "trees" / spires
     const spires = randInt(2, 5);
     for (let i = 0; i < spires; i++) {
       const sh = rand(2.5, 5.5);
-      const sg = new THREE.ConeGeometry(rand(0.6, 1.2), sh, 10);
+      const sg = new THREE.ConeGeometry(rand(0.6, 1.2), sh, 12);
       const sm = new THREE.MeshStandardMaterial({
         color: palette.accent,
-        emissive: new THREE.Color(palette.accent).multiplyScalar(0.25),
+        emissive: new THREE.Color(palette.accent).multiplyScalar(0.3),
         roughness: 0.4, metalness: 0.1
       });
       const s = new THREE.Mesh(sg, sm);
@@ -336,13 +375,12 @@ export class World {
       grp.add(s);
     }
 
-    // small floating crystals around island for feel
-    if (Math.random() < 0.6) {
+    if (Math.random() < 0.7) {
       const fc = new THREE.Mesh(
         new THREE.OctahedronGeometry(rand(0.8, 1.4)),
         new THREE.MeshStandardMaterial({
           color: palette.glow, emissive: palette.glow,
-          emissiveIntensity: 0.9, roughness: 0.2, metalness: 0.4,
+          emissiveIntensity: 1.0, roughness: 0.2, metalness: 0.4,
           transparent: true, opacity: 0.95
         })
       );
@@ -353,11 +391,9 @@ export class World {
 
     grp.userData.bobT = rand(0, Math.PI * 2);
     grp.userData.bobAmp = rand(0.4, 1.2);
-
     parent.add(grp);
   }
 
-  // ---------- Ring pickup ----------
   _spawnRing(parent, x, y, z) {
     const radius = 7;
     const grp = new THREE.Group();
@@ -365,31 +401,29 @@ export class World {
     grp.rotation.y = rand(-0.3, 0.3);
     grp.rotation.x = rand(-0.15, 0.15);
 
-    const geo = new THREE.TorusGeometry(radius, 0.55, 14, 64);
+    const geo = new THREE.TorusGeometry(radius, 0.55, 16, 72);
     const mat = new THREE.MeshStandardMaterial({
       color: 0x7df9ff,
-      emissive: 0x7df9ff, emissiveIntensity: 1.4,
-      roughness: 0.3, metalness: 0.5,
+      emissive: 0x7df9ff, emissiveIntensity: 1.6,
+      roughness: 0.25, metalness: 0.5,
       transparent: true, opacity: 0.95
     });
     const ring = new THREE.Mesh(geo, mat);
     grp.add(ring);
 
-    // outer glow halo
     const halo = new THREE.Mesh(
-      new THREE.TorusGeometry(radius + 0.4, 1.4, 14, 64),
+      new THREE.TorusGeometry(radius + 0.4, 1.6, 14, 72),
       new THREE.MeshBasicMaterial({
-        color: 0x7df9ff, transparent: true, opacity: 0.18,
+        color: 0x7df9ff, transparent: true, opacity: 0.2,
         blending: THREE.AdditiveBlending, depthWrite: false
       })
     );
     grp.add(halo);
 
-    // inner faint plate
     const inner = new THREE.Mesh(
       new THREE.CircleGeometry(radius - 0.7, 32),
       new THREE.MeshBasicMaterial({
-        color: 0xb388ff, transparent: true, opacity: 0.08,
+        color: 0xb388ff, transparent: true, opacity: 0.10,
         blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
       })
     );
@@ -402,14 +436,13 @@ export class World {
     parent.userData.rings.push(grp);
   }
 
-  // ---------- Crystal pickup ----------
   _spawnCrystal(parent, x, y, z) {
     const grp = new THREE.Group();
     grp.position.set(x, y, z);
     const geo = new THREE.OctahedronGeometry(1.2, 0);
     const mat = new THREE.MeshStandardMaterial({
       color: 0xff6ec7,
-      emissive: 0xff6ec7, emissiveIntensity: 1.3,
+      emissive: 0xff6ec7, emissiveIntensity: 1.4,
       roughness: 0.15, metalness: 0.7,
       transparent: true, opacity: 0.95
     });
@@ -419,7 +452,7 @@ export class World {
     const halo = new THREE.Mesh(
       new THREE.SphereGeometry(2.4, 12, 8),
       new THREE.MeshBasicMaterial({
-        color: 0xff6ec7, transparent: true, opacity: 0.2,
+        color: 0xff6ec7, transparent: true, opacity: 0.22,
         blending: THREE.AdditiveBlending, depthWrite: false
       })
     );
@@ -432,13 +465,12 @@ export class World {
     parent.userData.crystals.push(grp);
   }
 
-  // ---------- Storm cloud hazard ----------
   _spawnStorm(parent, x, y, z) {
     const grp = new THREE.Group();
     grp.position.set(x, y, z);
     const radius = rand(8, 14);
     const baseMat = new THREE.MeshStandardMaterial({
-      color: 0x441a3a, emissive: 0xff3b6b, emissiveIntensity: 0.45,
+      color: 0x441a3a, emissive: 0xff3b6b, emissiveIntensity: 0.55,
       roughness: 0.95, transparent: true, opacity: 0.92
     });
     for (let i = 0; i < 5; i++) {
@@ -454,7 +486,6 @@ export class World {
     parent.userData.hazards.push(grp);
   }
 
-  // ---------- Rock asteroid hazard ----------
   _spawnRock(parent, x, y, z) {
     const grp = new THREE.Group();
     grp.position.set(x, y, z);
@@ -486,17 +517,18 @@ export class World {
   // UPDATE
   // -----------------------------------------------------------
   update(dt, time, playerZ) {
-    // Move world rather than the player. Each chunk has fixed world Z.
-    // Player always near origin; we move chunks toward +z.
-    // -> But here we keep player moving in -z direction; we recycle chunks.
     this.travelled = -playerZ;
     if (this.sky.material.uniforms) this.sky.material.uniforms.time.value = time;
     if (this.ocean.material.uniforms) this.ocean.material.uniforms.time.value = time;
 
-    // animate stars (slow rotation)
     this.stars.rotation.y += dt * 0.005;
 
-    // bob islands & spin pickups
+    // clouds parallax
+    for (const layer of this.cloudLayers) {
+      layer.grp.position.z = playerZ * (1 - layer.parallax);
+      layer.grp.rotation.y += dt * 0.005 * layer.parallax;
+    }
+
     for (const chunk of this.chunks) {
       for (const c of chunk.children) {
         if (c.userData?.bobT !== undefined) {
@@ -527,12 +559,10 @@ export class World {
       }
     }
 
-    // sky follows player horizontally so it always looks "infinite"
     this.sky.position.set(0, 0, playerZ);
     this.ocean.position.z = playerZ;
     this.stars.position.z = playerZ;
 
-    // recycle chunks behind the player; spawn new ones ahead
     while (this.chunks.length && this.chunks[0].position.z > playerZ + this.chunkLength * this.behindChunks) {
       const old = this.chunks.shift();
       this._disposeChunk(old);
@@ -553,7 +583,6 @@ export class World {
     });
   }
 
-  // gather all active pickups/hazards near player for collision
   gatherNear(playerZ, range = 200) {
     const rings = [], crystals = [], hazards = [];
     for (const chunk of this.chunks) {
@@ -567,7 +596,6 @@ export class World {
   }
 
   worldPos(item) {
-    // item.obj is local to chunk
     return new THREE.Vector3().addVectors(item.parent.position, item.obj.position);
   }
 }
