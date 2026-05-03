@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0e27" />
+<title>SKYRIFT — Hand-Controlled Sky Voyage</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%237df9ff'/%3E%3Cstop offset='1' stop-color='%23ff6ec7'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='%230a0e27'/%3E%3Cpath d='M14 44 L32 12 L50 44 L32 36 Z' fill='url(%23g)'/%3E%3C/svg%3E" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="css/style.css" />
+
+<!-- Three.js + add-ons via importmap -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<!-- ============== LOADING SCREEN ============== -->
+<div id="loadingScreen" class="overlay loading">
+  <div class="loading-inner">
+    <div class="logo">
+      <span class="logo-glow">SKY</span><span class="logo-accent">RIFT</span>
+    </div>
+    <div class="logo-sub">無限のスカイ・ヴォヤージュ</div>
+    <div class="loader-bar"><div class="loader-bar-fill" id="loaderFill"></div></div>
+    <div class="loader-status" id="loaderStatus">エンジンを起動中…</div>
+  </div>
+  <div class="bg-grid"></div>
+  <div class="bg-glow"></div>
+</div>
+
+<!-- ============== TITLE / MENU ============== -->
+<div id="titleScreen" class="overlay hidden">
+  <div class="title-bg-grid"></div>
+  <div class="title-bg-glow"></div>
+  <div class="title-content">
+    <div class="title-tag">EXPERIMENTAL · HAND-TRACKING · INFINITE</div>
+    <h1 class="title-main"><span class="logo-glow">SKY</span><span class="logo-accent">RIFT</span></h1>
+    <p class="title-sub">手のひらが操縦桿になる、止まらない空の旅。</p>
+
+    <div class="mode-row">
+      <button class="mode-btn primary" id="btnHandMode">
+        <div class="mode-icon">✋</div>
+        <div class="mode-text">
+          <div class="mode-title">ハンド・モード</div>
+          <div class="mode-desc">カメラで手をかざして操縦</div>
+        </div>
+      </button>
+      <button class="mode-btn" id="btnTouchMode">
+        <div class="mode-icon">📱</div>
+        <div class="mode-text">
+          <div class="mode-title">タッチ・モード</div>
+          <div class="mode-desc">画面ジョイスティックで操縦</div>
+        </div>
+      </button>
+    </div>
+
+    <div class="hint-row">
+      <div class="hint"><b>リング</b>を集めて加速 · <b>結晶</b>を集めてスコア · <b>嵐</b>を回避</div>
+      <div class="hint small">手を傾ける／開閉でブースト · 拳でバレルロール</div>
+    </div>
+
+    <div class="footer-row">
+      <button class="ghost-btn" id="btnHowto">遊び方</button>
+      <button class="ghost-btn" id="btnSettings">設定</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============== HOW TO ============== -->
+<div id="howtoScreen" class="overlay hidden modal">
+  <div class="modal-card">
+    <h2>遊び方</h2>
+    <div class="howto-grid">
+      <div class="howto-item">
+        <div class="howto-ico">🛬</div>
+        <div>
+          <b>傾ける = 旋回・上下</b><br>
+          手のひらを左右に傾けるとロール、上下に動かすとピッチ。
+        </div>
+      </div>
+      <div class="howto-item">
+        <div class="howto-ico">✊</div>
+        <div>
+          <b>握る = ブースト</b><br>
+          拳を握り込むと加速。バレルロール演出が発動。
+        </div>
+      </div>
+      <div class="howto-item">
+        <div class="howto-ico">🖐️</div>
+        <div>
+          <b>開く = ブレーキ</b><br>
+          手を大きく開くと減速し、精密操作モードに。
+        </div>
+      </div>
+      <div class="howto-item">
+        <div class="howto-ico">💎</div>
+        <div>
+          <b>リング & 結晶</b><br>
+          光るリングをくぐると一気に加速、結晶でスコアアップ。
+        </div>
+      </div>
+      <div class="howto-item">
+        <div class="howto-ico">⚡</div>
+        <div>
+          <b>嵐 & 隕石</b><br>
+          赤い荒天や隕石はシールドで防げる。3 回で墜落。
+        </div>
+      </div>
+      <div class="howto-item">
+        <div class="howto-ico">∞</div>
+        <div>
+          <b>無限ステージ</b><br>
+          飛び続けるほど世界は変化。終わりはない。
+        </div>
+      </div>
+    </div>
+    <button class="primary-btn" id="btnHowtoClose">了解</button>
+  </div>
+</div>
+
+<!-- ============== SETTINGS ============== -->
+<div id="settingsScreen" class="overlay hidden modal">
+  <div class="modal-card">
+    <h2>設定</h2>
+    <label class="setting-row">
+      <span>グラフィック品質</span>
+      <select id="setQuality">
+        <option value="low">省エネ</option>
+        <option value="med" selected>スタンダード</option>
+        <option value="high">シネマティック</option>
+      </select>
+    </label>
+    <label class="setting-row">
+      <span>マウス感度（PC）</span>
+      <input type="range" id="setMouseSens" min="0.4" max="2.0" step="0.05" value="1.0">
+    </label>
+    <label class="setting-row">
+      <span>ハンド感度</span>
+      <input type="range" id="setHandSens" min="0.5" max="2.5" step="0.05" value="1.2">
+    </label>
+    <label class="setting-row">
+      <span>カメラを反転（自撮り）</span>
+      <input type="checkbox" id="setMirror" checked>
+    </label>
+    <label class="setting-row">
+      <span>BGM</span>
+      <input type="range" id="setBgm" min="0" max="1" step="0.05" value="0.5">
+    </label>
+    <label class="setting-row">
+      <span>SE</span>
+      <input type="range" id="setSfx" min="0" max="1" step="0.05" value="0.7">
+    </label>
+    <button class="primary-btn" id="btnSettingsClose">閉じる</button>
+  </div>
+</div>
+
+<!-- ============== HUD ============== -->
+<div id="hud" class="hud hidden">
+  <!-- top bar -->
+  <div class="hud-top">
+    <div class="hud-pill score-pill">
+      <span class="pill-label">SCORE</span>
+      <span class="pill-value" id="hudScore">0</span>
+    </div>
+    <div class="hud-pill combo-pill" id="comboPill">
+      <span class="pill-label">COMBO</span>
+      <span class="pill-value" id="hudCombo">x1</span>
+    </div>
+    <div class="hud-pill speed-pill">
+      <span class="pill-label">SPEED</span>
+      <span class="pill-value" id="hudSpeed">000</span>
+      <span class="pill-unit">km/h</span>
+    </div>
+  </div>
+
+  <!-- left side: shields -->
+  <div class="hud-left">
+    <div class="shield-cluster">
+      <div class="shield-orb on" data-i="0"></div>
+      <div class="shield-orb on" data-i="1"></div>
+      <div class="shield-orb on" data-i="2"></div>
+    </div>
+    <div class="shield-label">SHIELD</div>
+  </div>
+
+  <!-- right side: distance -->
+  <div class="hud-right">
+    <div class="dist-pill">
+      <div class="dist-num" id="hudDist">0</div>
+      <div class="dist-unit">m</div>
+    </div>
+    <div class="dist-best">BEST <span id="hudBest">0</span> m</div>
+  </div>
+
+  <!-- center: crosshair / boost ring -->
+  <div class="hud-center">
+    <div class="crosshair">
+      <svg viewBox="0 0 100 100" width="120" height="120">
+        <circle cx="50" cy="50" r="46" stroke="rgba(255,255,255,0.25)" fill="none" stroke-width="1"/>
+        <circle cx="50" cy="50" r="46" stroke="#7df9ff" fill="none" stroke-width="2.5"
+                stroke-dasharray="289" stroke-dashoffset="289" id="boostRing"
+                transform="rotate(-90 50 50)"/>
+        <circle cx="50" cy="50" r="2.5" fill="#7df9ff"/>
+        <line x1="50" y1="14" x2="50" y2="24" stroke="#7df9ff" stroke-width="2"/>
+        <line x1="50" y1="76" x2="50" y2="86" stroke="#7df9ff" stroke-width="2"/>
+        <line x1="14" y1="50" x2="24" y2="50" stroke="#7df9ff" stroke-width="2"/>
+        <line x1="76" y1="50" x2="86" y2="50" stroke="#7df9ff" stroke-width="2"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- bottom: input feedback -->
+  <div class="hud-bottom">
+    <div class="hud-pill mini" id="modePill">MODE: HAND</div>
+    <div class="hud-pill mini" id="fpsPill">60 FPS</div>
+    <button class="hud-pill mini btn-pause" id="btnPause">⏸ PAUSE</button>
+  </div>
+
+  <!-- camera preview (hand mode) -->
+  <div id="camPreview" class="cam-preview hidden">
+    <video id="camVideo" autoplay playsinline muted></video>
+    <canvas id="handCanvas"></canvas>
+    <div class="cam-status" id="camStatus">手を画面に向けてください</div>
+    <div class="cam-frame"></div>
+  </div>
+
+  <!-- touch joystick (touch mode) -->
+  <div id="touchUI" class="touch-ui hidden">
+    <div class="joystick-zone" id="joyZone">
+      <div class="joystick-base">
+        <div class="joystick-knob" id="joyKnob"></div>
+      </div>
+    </div>
+    <button class="touch-btn boost" id="btnBoost">BOOST</button>
+    <button class="touch-btn brake" id="btnBrake">BRAKE</button>
+  </div>
+
+  <!-- center messages (combo, pickups, etc) -->
+  <div id="bigMsg" class="big-msg"></div>
+  <div id="comboFlash" class="combo-flash"></div>
+
+  <!-- pause overlay -->
+  <div id="pauseOverlay" class="overlay hidden modal">
+    <div class="modal-card">
+      <h2>一時停止</h2>
+      <button class="primary-btn" id="btnResume">再開</button>
+      <button class="ghost-btn" id="btnQuit">タイトルに戻る</button>
+    </div>
+  </div>
+
+  <!-- gameover overlay -->
+  <div id="gameoverScreen" class="overlay hidden modal">
+    <div class="modal-card">
+      <div class="go-tag">FLIGHT TERMINATED</div>
+      <h2>SKYRIFT</h2>
+      <div class="go-stats">
+        <div><span>SCORE</span><b id="goScore">0</b></div>
+        <div><span>DISTANCE</span><b id="goDist">0 m</b></div>
+        <div><span>MAX COMBO</span><b id="goCombo">x1</b></div>
+      </div>
+      <button class="primary-btn" id="btnRetry">もう一度</button>
+      <button class="ghost-btn" id="btnGoTitle">タイトルへ</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============== 3D CANVAS ============== -->
+<canvas id="gl"></canvas>
+
+<!-- vignette / dynamic overlays -->
+<div id="speedLines" class="speed-lines"></div>
+<div id="vignette" class="vignette"></div>
+<div id="damageFlash" class="damage-flash"></div>
+
+<!-- ============== MEDIAPIPE (loaded on demand) ============== -->
+<!-- We load mediapipe via JS dynamically to keep first paint fast -->
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
