@@ -38,6 +38,58 @@ export class World {
     this._setupOcean();
     this._setupClouds();
     this._setupStars();
+    this._setupGodRays();
+  }
+
+  // -----------------------------------------------------------
+  // God-rays / light shafts streaming from the sun
+  _setupGodRays() {
+    const COUNT = this.quality === 'high' ? 14 : this.quality === 'med' ? 9 : 6;
+    const grp = new THREE.Group();
+    const tex = this._makeRayTexture();
+    for (let i = 0; i < COUNT; i++) {
+      const m = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: tex,
+        color: i % 3 === 0 ? 0xfff2c8 : 0xffd6a0,
+        transparent: true,
+        depthWrite: false,
+        opacity: 0.0,                         // fade in over time
+        blending: THREE.AdditiveBlending,
+        rotation: rand(-0.3, 0.3)
+      }));
+      const a = rand(0, Math.PI * 2);
+      const r = rand(220, 360);
+      m.position.set(Math.cos(a) * r, rand(40, 120), -260 - Math.random() * 200);
+      const w = rand(80, 160), h = rand(280, 420);
+      m.scale.set(w, h, 1);
+      m.userData = { baseOpacity: rand(0.06, 0.22), phase: rand(0, Math.PI * 2) };
+      grp.add(m);
+    }
+    this.scene.add(grp);
+    this.godRays = grp;
+  }
+
+  _makeRayTexture() {
+    const c = document.createElement('canvas');
+    c.width = 64; c.height = 256;
+    const g = c.getContext('2d');
+    const grd = g.createLinearGradient(32, 0, 32, 256);
+    grd.addColorStop(0,    'rgba(255,255,255,0)');
+    grd.addColorStop(0.4,  'rgba(255,255,255,0.55)');
+    grd.addColorStop(1,    'rgba(255,255,255,0)');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 64, 256);
+    // soft horizontal falloff
+    const grd2 = g.createLinearGradient(0, 0, 64, 0);
+    grd2.addColorStop(0, 'rgba(0,0,0,1)');
+    grd2.addColorStop(0.5,'rgba(0,0,0,0)');
+    grd2.addColorStop(1, 'rgba(0,0,0,1)');
+    g.globalCompositeOperation = 'destination-out';
+    g.fillStyle = grd2;
+    g.fillRect(0, 0, 64, 256);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
   }
 
   // -----------------------------------------------------------
@@ -635,6 +687,15 @@ export class World {
     if (this.ocean.material.uniforms) this.ocean.material.uniforms.time.value = time;
 
     this.stars.rotation.y += dt * 0.005;
+
+    // god-rays: gentle pulsing + parallax follow
+    if (this.godRays) {
+      this.godRays.position.z = playerZ - 200;
+      for (const r of this.godRays.children) {
+        r.userData.phase += dt * 0.5;
+        r.material.opacity = r.userData.baseOpacity * (0.7 + Math.sin(r.userData.phase) * 0.3);
+      }
+    }
 
     // clouds parallax
     for (const layer of this.cloudLayers) {
