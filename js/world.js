@@ -127,7 +127,7 @@ export class World {
           col = mix(col, topColor, smoothstep(0.45, 1.0, h));
           float sd = max(dot(vN, sunDir), 0.0);
           col += sunColor * pow(sd, 320.0) * 1.8;
-          col += sunColor * pow(sd, 8.0) * 0.22;
+          col += sunColor * pow(sd, 12.0) * 0.14;
           // aurora-ish bands
           float band = sin((vN.y + time * 0.02) * 30.0) * 0.5 + 0.5;
           col += vec3(0.05, 0.10, 0.18) * band * smoothstep(0.4, 0.9, h);
@@ -143,7 +143,7 @@ export class World {
   }
 
   _setupLights() {
-    const hemi = new THREE.HemisphereLight(0xc0d6ff, 0xff9fb8, 0.95);
+    const hemi = new THREE.HemisphereLight(0xc0d6ff, 0xff9fb8, 0.65);
     this.scene.add(hemi);
 
     const dir = new THREE.DirectionalLight(0xfff2cc, 1.4);
@@ -473,7 +473,7 @@ export class World {
     const geo = new THREE.TorusGeometry(radius, 0.55, 16, 72);
     const mat = new THREE.MeshStandardMaterial({
       color: 0x7df9ff,
-      emissive: 0x7df9ff, emissiveIntensity: 1.6,
+      emissive: 0x7df9ff, emissiveIntensity: 0.9,
       roughness: 0.25, metalness: 0.5,
       transparent: true, opacity: 0.95
     });
@@ -511,7 +511,7 @@ export class World {
     const geo = new THREE.OctahedronGeometry(1.2, 0);
     const mat = new THREE.MeshStandardMaterial({
       color: 0xff6ec7,
-      emissive: 0xff6ec7, emissiveIntensity: 1.4,
+      emissive: 0xff6ec7, emissiveIntensity: 0.85,
       roughness: 0.15, metalness: 0.7,
       transparent: true, opacity: 0.95
     });
@@ -570,7 +570,7 @@ export class World {
     const core = new THREE.Mesh(
       new THREE.IcosahedronGeometry(1.5, 1),
       new THREE.MeshStandardMaterial({
-        color, emissive: color, emissiveIntensity: 1.6,
+        color, emissive: color, emissiveIntensity: 1.0,
         roughness: 0.18, metalness: 0.6,
         transparent: true, opacity: 0.95
       })
@@ -614,7 +614,7 @@ export class World {
     // two vertical pillars + top arch
     const pillarGeo = new THREE.CylinderGeometry(0.4, 0.6, 14, 14);
     const pillarMat = new THREE.MeshStandardMaterial({
-      color: 0xffd86b, emissive: 0xffd86b, emissiveIntensity: 1.2,
+      color: 0xffd86b, emissive: 0xffd86b, emissiveIntensity: 0.8,
       roughness: 0.3, metalness: 0.6
     });
     const pl = new THREE.Mesh(pillarGeo, pillarMat);

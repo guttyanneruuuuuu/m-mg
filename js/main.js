@@ -125,7 +125,7 @@ const renderer = new THREE.WebGLRenderer({
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, state.quality === 'high' ? 2 : 1.5));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.08;
+renderer.toneMappingExposure = 0.85;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 4000);
@@ -139,10 +139,10 @@ function setupPost() {
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
 
-  const bs = state.quality === 'high' ? 0.95 : state.quality === 'med' ? 0.55 : 0.35;
+  const bs = state.quality === 'high' ? 0.42 : state.quality === 'med' ? 0.25 : 0.16;
   bloomPass = new UnrealBloomPass(
     new THREE.Vector2(window.innerWidth, window.innerHeight),
-    bs, 0.7, 0.18
+    bs, 0.55, 0.55
   );
   composer.addPass(bloomPass);
 
@@ -226,7 +226,7 @@ function pickMission() {
     progress: 0,
     label: tpl.label.replace('{n}', tpl.target),
     reward: tpl.reward,
-    startPos: player ? player.pos.z : 0,
+    startPos: player ? -player.pos.z : 0,
     startedAt: performance.now() / 1000
   };
 }
@@ -242,19 +242,20 @@ function setMission(m) {
 }
 
 function progressMission(deltaProgress) {
-  if (!state.mission) return;
+  if (!state.mission || state.mission.completed) return;
   state.mission.progress += deltaProgress;
   const m = state.mission;
   const p = clamp(m.progress / m.target, 0, 1);
   missionBarFill.style.width = (p * 100).toFixed(0) + '%';
   missionProgress.textContent = `${Math.floor(m.progress).toLocaleString()} / ${m.target.toLocaleString()}`;
   if (m.progress >= m.target) {
+    m.completed = true;
     addScore(m.reward, false);
     missionBanner.classList.add('done');
     flashMsg(`MISSION CLEAR  +${m.reward}`);
     audio.combo(5);
     state.missionStreak++;
-    setTimeout(() => setMission(pickMission()), 1500);
+    setTimeout(() => { if (state.running) setMission(pickMission()); }, 1500);
   }
 }
 
@@ -400,7 +401,7 @@ $('btnSettingsClose').addEventListener('click', () => {
   audio.setBgm(state.bgmVol);
   audio.setSfx(state.sfxVol);
   if (bloomPass) {
-    const bs = state.quality === 'high' ? 0.95 : state.quality === 'med' ? 0.55 : 0.35;
+    const bs = state.quality === 'high' ? 0.42 : state.quality === 'med' ? 0.25 : 0.16;
     bloomPass.strength = bs;
   }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, state.quality === 'high' ? 2 : 1.5));
@@ -584,7 +585,7 @@ function processCollisions(dt) {
         if (state.mission?.kind === 'noHit') {
           // reset noHit progress
           state.mission.progress = 0;
-          state.mission.startPos = player.pos.z;
+          state.mission.startPos = -player.pos.z;
           missionBarFill.style.width = '0%';
           missionProgress.textContent = `0 / ${state.mission.target.toLocaleString()}`;
         }
@@ -733,6 +734,7 @@ function loop() {
   const now = performance.now();
   let rawDt = (now - last) / 1000;
   last = now;
+  if (rawDt <= 0 || !isFinite(rawDt)) rawDt = 1 / 60; // fallback to ~60 FPS when performance.now() is unavailable
   if (rawDt > 0.1) rawDt = 0.1;
   const time = now / 1000;
 
