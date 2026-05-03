@@ -513,15 +513,30 @@ function processCollisions(dt) {
       const dx = _wp.x - playerPos.x;
       const dy = _wp.y - playerPos.y;
       const r = Math.hypot(dx, dy);
-      if (r < item.obj.userData.radius * 0.85) {
-        const perfect = r < item.obj.userData.radius * 0.35;
-        const bonus = perfect ? 500 : 250;
-        addScore(bonus, true);
-        flashMsg(perfect ? 'PERFECT!' : 'RING!');
-        fx.spawnRing(_wp.clone());
-        audio.ringPass();
-        player.speed = clamp(player.speed + 32, player.minSpeed, player.maxSpeed);
-        if (state.mission?.kind === 'rings') progressMission(1);
+      const isGate = item.obj.userData.kind === 'gate';
+      const hitR = isGate ? item.obj.userData.radius * 0.95 : item.obj.userData.radius * 0.85;
+      const verticalOK = !isGate || Math.abs(dy) < (item.obj.userData.halfHeight || 7);
+      if (r < hitR && verticalOK) {
+        if (isGate) {
+          addScore(800, true);
+          flashMsg('GATE BONUS!');
+          fx.spawnRing(_wp.clone());
+          fx.spawnPickup(_wp.clone(), 0xffd86b);
+          audio.combo(3);
+          // gates also bump combo by extra
+          state.combo = Math.min(state.combo + 2, 99);
+          state.maxCombo = Math.max(state.maxCombo, state.combo);
+          state.comboTimer = 5.0;
+        } else {
+          const perfect = r < item.obj.userData.radius * 0.35;
+          const bonus = perfect ? 500 : 250;
+          addScore(bonus, true);
+          flashMsg(perfect ? 'PERFECT!' : 'RING!');
+          fx.spawnRing(_wp.clone());
+          audio.ringPass();
+          player.speed = clamp(player.speed + 32, player.minSpeed, player.maxSpeed);
+          if (state.mission?.kind === 'rings') progressMission(1);
+        }
         item.obj.userData.alive = false;
         item.parent.remove(item.obj);
       }
@@ -529,11 +544,17 @@ function processCollisions(dt) {
   }
   for (const item of near.crystals) {
     _wp.copy(item.parent.position).add(item.obj.position);
-    if (_wp.distanceTo(playerPos) < 3.6) {
-      addScore(120, true);
-      fx.spawnPickup(_wp.clone(), 0xff6ec7);
-      audio.pickup();
-      if (state.mission?.kind === 'crystals') progressMission(1);
+    const isPower = item.obj.userData.kind === 'power';
+    const hitR = isPower ? 4.0 : 3.6;
+    if (_wp.distanceTo(playerPos) < hitR) {
+      if (isPower) {
+        applyPower(item.obj.userData.power, _wp);
+      } else {
+        addScore(120, true);
+        fx.spawnPickup(_wp.clone(), 0xff6ec7);
+        audio.pickup();
+        if (state.mission?.kind === 'crystals') progressMission(1);
+      }
       item.obj.userData.alive = false;
       item.parent.remove(item.obj);
     }
@@ -571,6 +592,30 @@ function processCollisions(dt) {
   if (nearMiss) {
     state.timeScaleTarget = 0.55;
     setTimeout(() => state.timeScaleTarget = 1, 350);
+  }
+}
+
+function applyPower(kind, pos) {
+  fx.spawnPickup(pos.clone(), kind === 'shield' ? 0x7df9ff : kind === 'slowmo' ? 0xb388ff : 0xffd86b);
+  fx.spawnRing(pos.clone());
+  audio.combo(4);
+  if (kind === 'shield') {
+    if (player.shields < 3) {
+      player.shields++;
+      updateShieldUI();
+      flashMsg('+SHIELD');
+    } else {
+      addScore(800, true);
+      flashMsg('SHIELD MAX  +800');
+    }
+  } else if (kind === 'slowmo') {
+    state.timeScaleTarget = 0.45;
+    setTimeout(() => state.timeScaleTarget = 1, 2200);
+    flashMsg('TIME SLOW');
+  } else if (kind === 'mega') {
+    addScore(2000, true);
+    player.boostFuel = 1;
+    flashMsg('MEGA  +2000');
   }
 }
 

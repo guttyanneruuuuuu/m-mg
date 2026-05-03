@@ -299,6 +299,23 @@ export class World {
       this._spawnCrystal(chunk, lx, ly, lz);
     }
 
+    // Special pickups (rare): shield, time-slow, mega-coin
+    if (Math.random() < 0.55) {
+      const lz = rand(-this.chunkLength + 20, -20);
+      const lx = rand(-50, 50);
+      const ly = rand(-15, 30);
+      const kinds = ['shield', 'slowmo', 'mega'];
+      this._spawnPower(chunk, lx, ly, lz, choose(kinds));
+    }
+
+    // Score gates — narrow lit gates worth big points + multiplier
+    if (Math.random() < 0.35) {
+      const lz = rand(-this.chunkLength + 30, -30);
+      const lx = rand(-30, 30);
+      const ly = rand(-10, 25);
+      this._spawnGate(chunk, lx, ly, lz);
+    }
+
     const hazardChance = clamp(0.25 + variation * 0.3, 0.25, 0.85);
     const haz = randInt(1, 3 + Math.floor(variation * 2));
     for (let i = 0; i < haz; i++) {
@@ -486,6 +503,102 @@ export class World {
     parent.userData.hazards.push(grp);
   }
 
+  _spawnPower(parent, x, y, z, kind) {
+    const grp = new THREE.Group();
+    grp.position.set(x, y, z);
+
+    const colors = {
+      shield: 0x7df9ff,
+      slowmo: 0xb388ff,
+      mega:   0xffd86b
+    };
+    const color = colors[kind];
+
+    // glowing core orb
+    const core = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(1.5, 1),
+      new THREE.MeshStandardMaterial({
+        color, emissive: color, emissiveIntensity: 1.6,
+        roughness: 0.18, metalness: 0.6,
+        transparent: true, opacity: 0.95
+      })
+    );
+    grp.add(core);
+
+    // outer wireframe shell
+    const shell = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(2.2, 1),
+      new THREE.MeshBasicMaterial({
+        color, transparent: true, opacity: 0.55, wireframe: true
+      })
+    );
+    grp.add(shell);
+
+    // halo
+    const halo = new THREE.Mesh(
+      new THREE.SphereGeometry(3.0, 16, 12),
+      new THREE.MeshBasicMaterial({
+        color, transparent: true, opacity: 0.18,
+        blending: THREE.AdditiveBlending, depthWrite: false
+      })
+    );
+    grp.add(halo);
+
+    grp.userData.kind = 'power';
+    grp.userData.power = kind;
+    grp.userData.radius = 2.6;
+    grp.userData.alive = true;
+    grp.userData.spinT = rand(0, Math.PI * 2);
+    grp.userData.shell = shell;
+    grp.userData.core = core;
+    parent.add(grp);
+    parent.userData.crystals.push(grp);
+  }
+
+  _spawnGate(parent, x, y, z) {
+    const grp = new THREE.Group();
+    grp.position.set(x, y, z);
+
+    // two vertical pillars + top arch
+    const pillarGeo = new THREE.CylinderGeometry(0.4, 0.6, 14, 14);
+    const pillarMat = new THREE.MeshStandardMaterial({
+      color: 0xffd86b, emissive: 0xffd86b, emissiveIntensity: 1.2,
+      roughness: 0.3, metalness: 0.6
+    });
+    const pl = new THREE.Mesh(pillarGeo, pillarMat);
+    pl.position.set(-7, 0, 0);
+    grp.add(pl);
+    const pr = pl.clone();
+    pr.position.x = 7;
+    grp.add(pr);
+
+    // crossbar
+    const bar = new THREE.Mesh(
+      new THREE.BoxGeometry(15, 0.6, 0.6),
+      pillarMat
+    );
+    bar.position.y = 7;
+    grp.add(bar);
+
+    // light plane filling the gate
+    const plane = new THREE.Mesh(
+      new THREE.PlaneGeometry(14, 14),
+      new THREE.MeshBasicMaterial({
+        color: 0xffd86b, transparent: true, opacity: 0.18,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+      })
+    );
+    plane.position.y = 0;
+    grp.add(plane);
+
+    grp.userData.kind = 'gate';
+    grp.userData.radius = 7;
+    grp.userData.halfHeight = 7;
+    grp.userData.alive = true;
+    parent.add(grp);
+    parent.userData.rings.push(grp); // gates use ring collision logic
+  }
+
   _spawnRock(parent, x, y, z) {
     const grp = new THREE.Group();
     grp.position.set(x, y, z);
@@ -547,6 +660,12 @@ export class World {
         cr.rotation.y += dt * 1.6;
         cr.rotation.x += dt * 0.7;
         cr.position.y += Math.sin(cr.userData.spinT * 2.0) * dt * 0.4;
+        if (cr.userData.kind === 'power' && cr.userData.shell) {
+          cr.userData.shell.rotation.y -= dt * 1.2;
+          cr.userData.shell.rotation.z += dt * 0.7;
+          const s = 1 + Math.sin(cr.userData.spinT * 3.5) * 0.08;
+          cr.userData.shell.scale.setScalar(s);
+        }
       }
       for (const h of chunk.userData.hazards) {
         if (h.userData.kind === 'rock' && h.userData.spin) {
