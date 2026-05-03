@@ -604,6 +604,24 @@ function processCollisions(dt) {
   }
 }
 
+function scorePopup(amount, color = '') {
+  const layer = $('scorePopups');
+  if (!layer) return;
+  const el = document.createElement('div');
+  el.className = 'score-popup ' + color;
+  el.textContent = '+' + amount.toLocaleString();
+  // project player position to screen for source point
+  const v = player.pos.clone().project(camera);
+  const x = (v.x * 0.5 + 0.5) * window.innerWidth;
+  const y = (1 - (v.y * 0.5 + 0.5)) * window.innerHeight;
+  // jitter so multiple don't overlap
+  const jx = (Math.random() - 0.5) * 80;
+  el.style.left = (x + jx) + 'px';
+  el.style.top  = (y - 40) + 'px';
+  layer.appendChild(el);
+  setTimeout(() => el.remove(), 1100);
+}
+
 function applyPower(kind, pos) {
   fx.spawnPickup(pos.clone(), kind === 'shield' ? 0x7df9ff : kind === 'slowmo' ? 0xb388ff : 0xffd86b);
   fx.spawnRing(pos.clone());
@@ -632,6 +650,9 @@ function addScore(base, combo) {
   const mult = combo ? state.combo : 1;
   const gained = base * mult;
   state.score += gained;
+  // popup color cue
+  const c = base >= 1000 ? 'gold' : base >= 500 ? 'violet' : base >= 200 ? 'pink' : '';
+  scorePopup(gained, c);
   if (combo) {
     state.comboTimer = 4.0;
     state.combo = Math.min(state.combo + 1, 99);
