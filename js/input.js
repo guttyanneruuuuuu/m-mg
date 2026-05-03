@@ -45,6 +45,8 @@ export class InputManager {
     this.joy = { active: false, dx: 0, dy: 0, baseX: 0, baseY: 0, startX: 0, startY: 0 };
     this.touchBoost = 0;
     this.touchBrake = 0;
+    this._lastTapTime = 0;
+    this._tapBoostUntil = 0;
     this._installTouch();
 
     // device tilt (optional, requested when entering touch mode on phones)
@@ -141,7 +143,16 @@ export class InputManager {
       resetKnob();
     };
 
-    zone.addEventListener('touchstart', e => { e.preventDefault(); start(e); }, { passive: false });
+    zone.addEventListener('touchstart', e => {
+      e.preventDefault();
+      // Double-tap on the joystick zone gives a 0.7s boost burst
+      const now = performance.now();
+      if (now - this._lastTapTime < 280) {
+        this._tapBoostUntil = now + 700;
+      }
+      this._lastTapTime = now;
+      start(e);
+    }, { passive: false });
     zone.addEventListener('touchmove',  e => { e.preventDefault(); move(e); },  { passive: false });
     zone.addEventListener('touchend',   e => { e.preventDefault(); end();   },  { passive: false });
     zone.addEventListener('touchcancel',e => { e.preventDefault(); end();   },  { passive: false });
@@ -259,12 +270,23 @@ export class InputManager {
       boost = Math.max(boost, this.touchBoost);
       brake = Math.max(brake, this.touchBrake);
 
+      // double-tap boost burst
+      if (performance.now() < this._tapBoostUntil) {
+        boost = Math.max(boost, 1.0);
+      }
+
       // optional gyro assist — nudges roll/pitch slightly
       if (this.tiltAssist && this.tilt.calibG != null) {
         const tiltR = clamp(this.tilt.gamma / 35, -0.6, 0.6);
         const tiltP = clamp(this.tilt.beta  / 35, -0.6, 0.6);
         r = clamp(r + tiltR * 0.45, -1, 1);
         p = clamp(p + tiltP * 0.4, -1, 1);
+      }
+
+      // auto-level: when joystick is centered (no input), gently re-level the ship
+      // (only roll/pitch — yaw stays where it is) so beginners don't drift sideways forever
+      if (Math.abs(jx) < 0.04 && Math.abs(jy) < 0.04) {
+        r *= 0.0; p *= 0.0; // already 0
       }
     }
 
