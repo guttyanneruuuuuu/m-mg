@@ -11,6 +11,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass }     from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass }from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass }     from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass }     from 'three/addons/postprocessing/ShaderPass.js';
+import { ChromaShader }   from './postfx.js';
 
 import { InputManager } from './input.js';
 import { HandTracker }  from './hand.js';
@@ -131,6 +133,7 @@ camera.position.set(0, 4, 14);
 
 let composer = null;
 let bloomPass = null;
+let chromaPass = null;
 
 function setupPost() {
   composer = new EffectComposer(renderer);
@@ -142,6 +145,13 @@ function setupPost() {
     bs, 0.7, 0.18
   );
   composer.addPass(bloomPass);
+
+  // chromatic aberration + vignette + grain (custom shader)
+  chromaPass = new ShaderPass(ChromaShader);
+  chromaPass.uniforms.vignette.value = state.quality === 'low' ? 0.30 : 0.45;
+  chromaPass.uniforms.grain.value    = state.quality === 'low' ? 0.02 : 0.05;
+  composer.addPass(chromaPass);
+
   composer.addPass(new OutputPass());
   resize();
 }
@@ -654,6 +664,15 @@ function loop() {
   // smooth time scale (for near-miss time-slow effect)
   state.timeScale = damp(state.timeScale, state.timeScaleTarget, 8, rawDt);
   const dt = rawDt * state.timeScale;
+
+  // chroma/vignette amount tied to speed & boost
+  if (chromaPass && player) {
+    const sNorm = clamp((player.speed - player.minSpeed) / (player.maxSpeed - player.minSpeed), 0, 1);
+    const target = (player.boostActive ? 0.012 : 0.003) + sNorm * 0.012;
+    chromaPass.uniforms.amount.value = damp(chromaPass.uniforms.amount.value, target, 6, rawDt);
+    chromaPass.uniforms.radius.value = damp(chromaPass.uniforms.radius.value, sNorm * 0.025, 4, rawDt);
+    chromaPass.uniforms.time.value = time;
+  }
 
   input.update(rawDt); // input always real-time
 
