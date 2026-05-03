@@ -191,6 +191,7 @@ async function bootSequence() {
   ui.loading.classList.add('hidden');
   ui.title.classList.remove('hidden');
   ui.hudBest.textContent = state.best;
+  const tb = $('titleBest'); if (tb) tb.textContent = state.best.toLocaleString();
 
   requestAnimationFrame(loop);
 }
@@ -339,7 +340,18 @@ function quitToTitle() {
 }
 
 // =============== UI bindings ===============
-$('btnHandMode').addEventListener('click', () => startGame('hand'));
+$('btnHandMode').addEventListener('click', () => {
+  // show intro modal first time, then start
+  $('handIntroScreen').classList.remove('hidden');
+});
+$('btnStartHand').addEventListener('click', () => {
+  $('handIntroScreen').classList.add('hidden');
+  startGame('hand');
+});
+$('btnHandCancel').addEventListener('click', () => {
+  $('handIntroScreen').classList.add('hidden');
+  startGame(supportsTouch() ? 'touch' : 'keyboard');
+});
 $('btnTouchMode').addEventListener('click', () => startGame(supportsTouch() ? 'touch' : 'keyboard'));
 $('btnHowto').addEventListener('click', () => ui.howto.classList.remove('hidden'));
 $('btnHowtoClose').addEventListener('click', () => ui.howto.classList.add('hidden'));

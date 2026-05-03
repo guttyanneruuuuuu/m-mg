@@ -45,25 +45,39 @@
 <div id="titleScreen" class="overlay hidden">
   <div class="title-bg-grid"></div>
   <div class="title-bg-glow"></div>
+  <div class="title-particles" id="titleParticles"></div>
   <div class="title-content">
-    <div class="title-tag">EXPERIMENTAL · HAND-TRACKING · INFINITE</div>
-    <h1 class="title-main"><span class="logo-glow">SKY</span><span class="logo-accent">RIFT</span></h1>
+    <div class="title-tag">
+      <span class="title-tag-dot"></span>
+      EXPERIMENTAL · HAND-TRACKING · INFINITE
+    </div>
+    <h1 class="title-main">
+      <span class="logo-glow">SKY</span><span class="logo-accent">RIFT</span>
+    </h1>
     <p class="title-sub">手のひらが操縦桿になる、止まらない空の旅。</p>
+
+    <div class="best-line" id="bestLine">
+      <span class="best-label">BEST</span>
+      <span class="best-value" id="titleBest">0</span>
+      <span class="best-unit">m</span>
+    </div>
 
     <div class="mode-row">
       <button class="mode-btn primary" id="btnHandMode">
         <div class="mode-icon">✋</div>
         <div class="mode-text">
           <div class="mode-title">ハンド・モード</div>
-          <div class="mode-desc">カメラで手をかざして操縦</div>
+          <div class="mode-desc">カメラで手をかざして操縦 — 最も没入感 ◎</div>
         </div>
+        <div class="mode-arrow">→</div>
       </button>
       <button class="mode-btn" id="btnTouchMode">
         <div class="mode-icon">📱</div>
         <div class="mode-text">
           <div class="mode-title">タッチ・モード</div>
-          <div class="mode-desc">画面ジョイスティックで操縦</div>
+          <div class="mode-desc">画面ジョイスティック + ジャイロ補助</div>
         </div>
+        <div class="mode-arrow">→</div>
       </button>
     </div>
 
@@ -76,6 +90,25 @@
       <button class="ghost-btn" id="btnHowto">遊び方</button>
       <button class="ghost-btn" id="btnSettings">設定</button>
     </div>
+  </div>
+</div>
+
+<!-- ============== HAND PERMISSION INTRO ============== -->
+<div id="handIntroScreen" class="overlay hidden modal">
+  <div class="modal-card hand-intro">
+    <div class="hand-intro-icon">✋</div>
+    <h2>カメラを使います</h2>
+    <p class="hand-intro-desc">
+      端末のカメラで <b>手の動き</b> を読み取り、機体を操縦します。<br>
+      <span class="hand-intro-privacy">映像は端末内だけで処理され、外部には一切送信されません。</span>
+    </p>
+    <div class="hand-intro-tips">
+      <div class="tip"><span>📍</span>明るい場所で、手の全体がカメラに映る位置に</div>
+      <div class="tip"><span>📏</span>顔から30〜50cm程度の距離が理想</div>
+      <div class="tip"><span>👋</span>最初の数秒は手を真っ直ぐ伸ばして自動キャリブ</div>
+    </div>
+    <button class="primary-btn" id="btnStartHand">カメラを許可してスタート</button>
+    <button class="ghost-btn" id="btnHandCancel">タッチで遊ぶ</button>
   </div>
 </div>
 

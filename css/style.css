@@ -168,7 +168,9 @@ canvas#gl{
   width: 100%;
 }
 .title-tag{
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 6px 14px;
   border: 1px solid var(--stroke);
   border-radius: 99px;
@@ -179,6 +181,55 @@ canvas#gl{
   color: var(--text-dim);
   margin-bottom: 16px;
 }
+.title-tag-dot{
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent-1);
+  box-shadow: 0 0 8px var(--accent-1);
+  animation: tagPulse 1.6s ease-in-out infinite;
+}
+@keyframes tagPulse{
+  0%, 100%{ opacity: 0.45; transform: scale(0.85);}
+  50%{      opacity: 1;    transform: scale(1.15);}
+}
+
+.title-particles{
+  position:absolute; inset:0; z-index:0; pointer-events:none;
+  overflow:hidden;
+  mask-image: radial-gradient(ellipse at center, #000 30%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 30%, transparent 80%);
+}
+.title-particles::before, .title-particles::after{
+  content:'';
+  position:absolute; inset:0;
+  background:
+    radial-gradient(2px 2px at 20% 30%, #7df9ff 50%, transparent 100%),
+    radial-gradient(2px 2px at 70% 60%, #ff6ec7 50%, transparent 100%),
+    radial-gradient(2px 2px at 40% 80%, #b388ff 50%, transparent 100%),
+    radial-gradient(1px 1px at 85% 20%, #fff 50%, transparent 100%),
+    radial-gradient(2px 2px at 15% 70%, #7df9ff 50%, transparent 100%),
+    radial-gradient(1px 1px at 60% 35%, #ffd86b 50%, transparent 100%);
+  background-size: 100% 100%;
+  opacity: 0.65;
+  filter: blur(0.4px);
+  animation: titlePartA 24s linear infinite;
+}
+.title-particles::after{
+  background:
+    radial-gradient(2px 2px at 30% 50%, #ff6ec7 50%, transparent 100%),
+    radial-gradient(1px 1px at 80% 75%, #fff 50%, transparent 100%),
+    radial-gradient(2px 2px at 55% 15%, #7df9ff 50%, transparent 100%),
+    radial-gradient(1px 1px at 10% 25%, #b388ff 50%, transparent 100%);
+  animation: titlePartB 32s linear infinite;
+  opacity: 0.5;
+}
+@keyframes titlePartA{
+  from{ transform: translateY(0); }
+  to{   transform: translateY(-40%); }
+}
+@keyframes titlePartB{
+  from{ transform: translateY(0); }
+  to{   transform: translateY(-30%); }
+}
 .title-main{
   font-family: 'Orbitron', sans-serif;
   font-weight: 900;
@@ -188,10 +239,90 @@ canvas#gl{
   line-height: 1;
 }
 .title-sub{
-  margin: 0 0 28px;
+  margin: 0 0 18px;
   color: var(--text-dim);
   font-size: clamp(13px, 3vw, 16px);
 }
+
+.best-line{
+  display: inline-flex; align-items: baseline; gap: 6px;
+  margin: 0 0 22px;
+  padding: 4px 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--stroke);
+  border-radius: 99px;
+}
+.best-label{
+  font-family:'Orbitron',sans-serif;
+  font-size: 10px; letter-spacing: 0.25em;
+  color: var(--text-dim);
+}
+.best-value{
+  font-family:'Orbitron',sans-serif;
+  font-weight: 900;
+  font-size: 16px;
+  color: var(--accent-1);
+  text-shadow: 0 0 8px rgba(125,249,255,0.6);
+}
+.best-unit{
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.2em;
+}
+
+.mode-btn{ position: relative; }
+.mode-arrow{
+  position: absolute;
+  right: 18px; top: 50%;
+  transform: translateY(-50%);
+  font-size: 22px;
+  color: var(--accent-1);
+  opacity: 0.6;
+  transition: transform 0.2s, opacity 0.2s;
+}
+.mode-btn:hover .mode-arrow, .mode-btn:active .mode-arrow{
+  transform: translateY(-50%) translateX(4px);
+  opacity: 1;
+}
+
+/* hand intro modal */
+.hand-intro{ text-align: center; }
+.hand-intro-icon{
+  font-size: 56px;
+  margin-bottom: 8px;
+  filter: drop-shadow(0 0 16px rgba(125,249,255,0.7));
+  animation: handWave 2.4s ease-in-out infinite;
+}
+@keyframes handWave{
+  0%,100%{ transform: rotate(-8deg); }
+  50%{    transform: rotate(8deg); }
+}
+.hand-intro-desc{
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  margin: 0 0 16px;
+}
+.hand-intro-privacy{
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.hand-intro-tips{
+  display: grid; gap: 8px;
+  margin: 0 0 18px;
+  text-align: left;
+}
+.hand-intro-tips .tip{
+  display: flex; gap: 10px; align-items: center;
+  padding: 10px 12px;
+  background: var(--glass);
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  font-size: 12px;
+}
+.hand-intro-tips .tip span{ font-size: 18px; }
+.hand-intro .primary-btn{ width: 100%; margin-bottom: 8px; }
+.hand-intro .ghost-btn{ width: 100%; }
 
 .mode-row{
   display: flex; flex-direction: column; gap: 12px;
