@@ -490,6 +490,33 @@ canvas#gl{
   background: var(--glass); border:1px solid var(--stroke);
   border-radius: 12px; padding: 10px 6px;
   display: flex; flex-direction: column; align-items: center;
+  position: relative;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.go-stats > div.record{
+  border-color: rgba(255,216,107,0.85);
+  box-shadow: 0 0 22px rgba(255,216,107,0.55);
+  background: linear-gradient(135deg, rgba(255,216,107,0.20), rgba(255,110,199,0.12));
+}
+.go-stats > div.record::after{
+  content: 'NEW';
+  position: absolute;
+  top: -8px; right: -6px;
+  background: linear-gradient(135deg, #ffd86b, #ff6ec7);
+  color: #0a0e27;
+  font-family:'Orbitron',sans-serif;
+  font-weight: 900;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  padding: 3px 7px;
+  border-radius: 99px;
+  box-shadow: 0 4px 12px rgba(255,216,107,0.5);
+  animation: recordPop 0.6s ease;
+}
+@keyframes recordPop{
+  0%{ transform: scale(0) rotate(-20deg); opacity: 0;}
+  60%{ transform: scale(1.25) rotate(8deg); opacity: 1;}
+  100%{ transform: scale(1) rotate(0); opacity: 1;}
 }
 .go-stats span{ font-size: 10px; color: var(--text-dim); letter-spacing:0.2em;}
 .go-stats b{ font-family: 'Orbitron',sans-serif; font-size: 18px; margin-top:2px;}

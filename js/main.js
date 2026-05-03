@@ -327,13 +327,22 @@ function endGame() {
   audio.gameover();
   audio.stopMusic();
   const dist = Math.max(0, Math.floor(-player.pos.z));
-  if (dist > state.best) { state.best = dist; Storage.patch({ best: dist }); }
-  if (state.score > state.bestScore) { state.bestScore = state.score; Storage.patch({ bestScore: state.score }); }
+  const newDistRecord  = dist > state.best;
+  const newScoreRecord = state.score > state.bestScore;
+  if (newDistRecord)  { state.best = dist; Storage.patch({ best: dist }); }
+  if (newScoreRecord) { state.bestScore = state.score; Storage.patch({ bestScore: state.score }); }
   ui.goScore.textContent = state.score.toLocaleString();
   ui.goDist.textContent  = dist.toLocaleString() + ' m';
   ui.goCombo.textContent = 'x' + state.maxCombo;
   ui.hudBest.textContent = state.best;
-  setTimeout(() => ui.gameover.classList.remove('hidden'), 700);
+  // mark fields as record-breaking
+  document.querySelectorAll('.go-stats > div').forEach(el => el.classList.remove('record'));
+  if (newScoreRecord) document.querySelectorAll('.go-stats > div')[0]?.classList.add('record');
+  if (newDistRecord)  document.querySelectorAll('.go-stats > div')[1]?.classList.add('record');
+  setTimeout(() => {
+    ui.gameover.classList.remove('hidden');
+    if (newDistRecord || newScoreRecord) flashMsg('NEW RECORD!');
+  }, 700);
   handTracker.stop();
   recalBtn.classList.add('hidden');
 }
