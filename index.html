@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
-<meta name="theme-color" content="#0a0e27" />
-<title>SKYRIFT — Hand-Controlled Sky Voyage</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%237df9ff'/%3E%3Cstop offset='1' stop-color='%23ff6ec7'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='%230a0e27'/%3E%3Cpath d='M14 44 L32 12 L50 44 L32 36 Z' fill='url(%23g)'/%3E%3C/svg%3E" />
+<meta name="theme-color" content="#05030f" />
+<title>STARFORGE — Hand-Controlled Space Combat</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%237df9ff'/%3E%3Cstop offset='1' stop-color='%23ff6ec7'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='%2305030f'/%3E%3Cpath d='M32 8 L52 52 L32 42 L12 52 Z' fill='url(%23g)'/%3E%3C/svg%3E" />
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -31,9 +31,9 @@
 <div id="loadingScreen" class="overlay loading">
   <div class="loading-inner">
     <div class="logo">
-      <span class="logo-glow">SKY</span><span class="logo-accent">RIFT</span>
+      <span class="logo-glow">STAR</span><span class="logo-accent">FORGE</span>
     </div>
-    <div class="logo-sub">無限のスカイ・ヴォヤージュ</div>
+    <div class="logo-sub">DEEP SPACE COMBAT · SURVIVOR</div>
     <div class="loader-bar"><div class="loader-bar-fill" id="loaderFill"></div></div>
     <div class="loader-status" id="loaderStatus">エンジンを起動中…</div>
   </div>
@@ -49,17 +49,26 @@
   <div class="title-content">
     <div class="title-tag">
       <span class="title-tag-dot"></span>
-      EXPERIMENTAL · HAND-TRACKING · INFINITE
+      HAND-TRACKING · SPACE COMBAT · SURVIVOR
     </div>
     <h1 class="title-main">
-      <span class="logo-glow">SKY</span><span class="logo-accent">RIFT</span>
+      <span class="logo-glow">STAR</span><span class="logo-accent">FORGE</span>
     </h1>
-    <p class="title-sub">手のひらが操縦桿になる、止まらない空の旅。</p>
+    <p class="title-sub">手のひらが操縦桿、敵艦隊を撃ち墜とせ。100ステージで宇宙を制覇せよ。</p>
 
-    <div class="best-line" id="bestLine">
-      <span class="best-label">BEST</span>
-      <span class="best-value" id="titleBest">0</span>
-      <span class="best-unit">m</span>
+    <div class="title-stats">
+      <div class="title-stat">
+        <span class="title-stat-label">STAGE</span>
+        <span class="title-stat-value" id="titleStage">1</span>
+      </div>
+      <div class="title-stat">
+        <span class="title-stat-label">💎 SALVAGE</span>
+        <span class="title-stat-value" id="titleSalvage">0</span>
+      </div>
+      <div class="title-stat">
+        <span class="title-stat-label">BEST SCORE</span>
+        <span class="title-stat-value" id="titleScore">0</span>
+      </div>
     </div>
 
     <div class="mode-row">
@@ -67,26 +76,27 @@
         <div class="mode-icon">✋</div>
         <div class="mode-text">
           <div class="mode-title">ハンド・モード</div>
-          <div class="mode-desc">カメラで手をかざして操縦 — 最も没入感 ◎</div>
+          <div class="mode-desc">カメラで手を読み取り操縦・発射 — 没入感 ◎</div>
         </div>
         <div class="mode-arrow">→</div>
       </button>
       <button class="mode-btn" id="btnTouchMode">
         <div class="mode-icon">📱</div>
         <div class="mode-text">
-          <div class="mode-title">タッチ・モード</div>
-          <div class="mode-desc">画面ジョイスティック + ジャイロ補助</div>
+          <div class="mode-title">タッチ／キーボード・モード</div>
+          <div class="mode-desc">画面ジョイスティック + 発射ボタン</div>
         </div>
         <div class="mode-arrow">→</div>
       </button>
     </div>
 
     <div class="hint-row">
-      <div class="hint"><b>リング</b>を集めて加速 · <b>結晶</b>を集めてスコア · <b>嵐</b>を回避</div>
-      <div class="hint small">手を傾ける／開閉でブースト · 拳でバレルロール</div>
+      <div class="hint">敵艦撃破で <b>💎サルベージ</b> 獲得 · 機体強化で <b>100ステージクリア</b> へ</div>
+      <div class="hint small">負けても回収したサルベージは保存される（DaDa-Survivor 方式）</div>
     </div>
 
     <div class="footer-row">
+      <button class="ghost-btn primary-ghost" id="btnHangar">🛠 格納庫 (HANGAR)</button>
       <button class="ghost-btn" id="btnHowto">遊び方</button>
       <button class="ghost-btn" id="btnSettings">設定</button>
     </div>
@@ -99,13 +109,14 @@
     <div class="hand-intro-icon">✋</div>
     <h2>カメラを使います</h2>
     <p class="hand-intro-desc">
-      端末のカメラで <b>手の動き</b> を読み取り、機体を操縦します。<br>
+      端末のカメラで <b>手の動き・形</b> を読み取り、戦闘機を操縦＆発射します。<br>
       <span class="hand-intro-privacy">映像は端末内だけで処理され、外部には一切送信されません。</span>
     </p>
     <div class="hand-intro-tips">
       <div class="tip"><span>📍</span>明るい場所で、手の全体がカメラに映る位置に</div>
       <div class="tip"><span>📏</span>顔から30〜50cm程度の距離が理想</div>
       <div class="tip"><span>👋</span>最初の数秒は手を真っ直ぐ伸ばして自動キャリブ</div>
+      <div class="tip"><span>🤏</span>発射ジェスチャーは設定から変更可（既定: ピンチ）</div>
     </div>
     <button class="primary-btn" id="btnStartHand">カメラを許可してスタート</button>
     <button class="ghost-btn" id="btnHandCancel">タッチで遊ぶ</button>
@@ -128,35 +139,49 @@
         <div class="howto-ico">✊</div>
         <div>
           <b>握る = ブースト</b><br>
-          拳を握り込むと加速。バレルロール演出が発動。
+          拳でブースト加速。バレルロールで弾道回避。
         </div>
       </div>
       <div class="howto-item">
         <div class="howto-ico">🖐️</div>
         <div>
           <b>開く = ブレーキ</b><br>
-          手を大きく開くと減速し、精密操作モードに。
+          手を大きく開くと減速、精密狙いモードに。
+        </div>
+      </div>
+      <div class="howto-item">
+        <div class="howto-ico">🤏</div>
+        <div>
+          <b>ピンチ = 発射</b><br>
+          親指×人差指で連射。設定で 👆/👍/✊ にも変更可。
         </div>
       </div>
       <div class="howto-item">
         <div class="howto-ico">💎</div>
         <div>
-          <b>リング & 結晶</b><br>
-          光るリングをくぐると一気に加速、結晶でスコアアップ。
+          <b>サルベージ収集</b><br>
+          敵艦・隕石・カプセルから💎を獲得。負けても保存される。
         </div>
       </div>
       <div class="howto-item">
-        <div class="howto-ico">⚡</div>
+        <div class="howto-ico">🛠</div>
         <div>
-          <b>嵐 & 隕石</b><br>
-          赤い荒天や隕石はシールドで防げる。3 回で墜落。
+          <b>格納庫で強化</b><br>
+          シールド・火力・連射・ミサイル等を恒久強化。
         </div>
       </div>
       <div class="howto-item">
-        <div class="howto-ico">∞</div>
+        <div class="howto-ico">👹</div>
         <div>
-          <b>無限ステージ</b><br>
-          飛び続けるほど世界は変化。終わりはない。
+          <b>ステージ末のボス</b><br>
+          各ステージ終端に強敵が出現。倒すと次ステージへ。
+        </div>
+      </div>
+      <div class="howto-item">
+        <div class="howto-ico">🏆</div>
+        <div>
+          <b>100ステージで勝利</b><br>
+          約100周分で機体は十分強くなり、宇宙を制覇できる。
         </div>
       </div>
     </div>
@@ -189,14 +214,44 @@
       <input type="checkbox" id="setMirror" checked>
     </label>
     <label class="setting-row">
+      <span>発射ジェスチャー</span>
+      <select id="setFireGesture">
+        <option value="pinch">🤏 ピンチ (親指×人差指)</option>
+        <option value="point">☝️ 人差指を立てる</option>
+        <option value="thumbsup">👍 サムズアップ</option>
+        <option value="fistHold">✊ 拳を握る (ブースト無効)</option>
+      </select>
+    </label>
+    <label class="setting-row">
       <span>BGM</span>
-      <input type="range" id="setBgm" min="0" max="1" step="0.05" value="0.5">
+      <input type="range" id="setBgm" min="0" max="1" step="0.05" value="0.45">
     </label>
     <label class="setting-row">
       <span>SE</span>
       <input type="range" id="setSfx" min="0" max="1" step="0.05" value="0.7">
     </label>
     <button class="primary-btn" id="btnSettingsClose">閉じる</button>
+  </div>
+</div>
+
+<!-- ============== HANGAR (UPGRADE SHOP) ============== -->
+<div id="hangarScreen" class="overlay hidden modal">
+  <div class="modal-card hangar-card">
+    <div class="hangar-header">
+      <div>
+        <div class="hangar-tag">⚙ HANGAR</div>
+        <h2>機体強化</h2>
+      </div>
+      <div class="hangar-stats">
+        <div><span>💎 SALVAGE</span><b id="hangarSalvage">0</b></div>
+        <div><span>BEST STAGE</span><b id="hangarStage">1</b></div>
+      </div>
+    </div>
+    <div class="hangar-list" id="hangarList"></div>
+    <div class="hangar-footer">
+      <button class="ghost-btn warn-btn" id="btnHangarReset">セーブをリセット</button>
+      <button class="primary-btn" id="btnHangarClose">閉じる</button>
+    </div>
   </div>
 </div>
 
@@ -208,41 +263,49 @@
       <span class="pill-label">SCORE</span>
       <span class="pill-value" id="hudScore">0</span>
     </div>
-    <div class="hud-pill combo-pill" id="comboPill">
-      <span class="pill-label">COMBO</span>
-      <span class="pill-value" id="hudCombo">x1</span>
+    <div class="hud-pill salvage-pill">
+      <span class="pill-label">💎</span>
+      <span class="pill-value" id="hudSalvage">0</span>
+    </div>
+    <div class="hud-pill stage-pill">
+      <span class="pill-label">STAGE</span>
+      <span class="pill-value" id="hudStage">1</span>
     </div>
     <div class="hud-pill speed-pill">
-      <span class="pill-label">SPEED</span>
+      <span class="pill-label">SPD</span>
       <span class="pill-value" id="hudSpeed">000</span>
-      <span class="pill-unit">km/h</span>
     </div>
   </div>
 
-  <!-- left side: shields -->
+  <!-- wave / boss bar -->
+  <div class="hud-wave-wrap">
+    <div class="hud-wave-label">WAVE PROGRESS</div>
+    <div class="hud-wave-bar"><div class="hud-wave-fill" id="hudWave"></div></div>
+  </div>
+
+  <div id="hudBossBar" class="hud-boss-bar hidden">
+    <div class="hud-boss-label">⚠ BOSS</div>
+    <div class="hud-boss-track"><div class="hud-boss-fill" id="hudBossFill"></div></div>
+  </div>
+
+  <!-- left: HP -->
   <div class="hud-left">
-    <div class="shield-cluster">
-      <div class="shield-orb on" data-i="0"></div>
-      <div class="shield-orb on" data-i="1"></div>
-      <div class="shield-orb on" data-i="2"></div>
+    <div class="hp-label">SHIELD</div>
+    <div class="hp-bar-wrap">
+      <div class="hp-bar"><div class="hp-bar-fill" id="hudHpFill"></div></div>
+      <div class="hp-text" id="hudHpText">3 / 3</div>
     </div>
-    <div class="shield-label">SHIELD</div>
-  </div>
-
-  <!-- right side: distance -->
-  <div class="hud-right">
-    <div class="dist-pill">
-      <div class="dist-num" id="hudDist">0</div>
-      <div class="dist-unit">m</div>
+    <div id="hudMissile" class="missile-readout hidden">
+      <span class="missile-icon">🚀</span>
+      <span class="missile-count">0</span><span class="missile-max">/0</span>
     </div>
-    <div class="dist-best">BEST <span id="hudBest">0</span> m</div>
   </div>
 
   <!-- center: crosshair / boost ring -->
   <div class="hud-center">
     <div class="crosshair">
       <svg viewBox="0 0 100 100" width="120" height="120">
-        <circle cx="50" cy="50" r="46" stroke="rgba(255,255,255,0.25)" fill="none" stroke-width="1"/>
+        <circle cx="50" cy="50" r="46" stroke="rgba(255,255,255,0.2)" fill="none" stroke-width="1"/>
         <circle cx="50" cy="50" r="46" stroke="#7df9ff" fill="none" stroke-width="2.5"
                 stroke-dasharray="289" stroke-dashoffset="289" id="boostRing"
                 transform="rotate(-90 50 50)"/>
@@ -255,7 +318,7 @@
     </div>
   </div>
 
-  <!-- bottom: input feedback -->
+  <!-- bottom hud -->
   <div class="hud-bottom">
     <div class="hud-pill mini" id="modePill">MODE: HAND</div>
     <div class="hud-pill mini" id="fpsPill">60 FPS</div>
@@ -270,7 +333,7 @@
     <div class="cam-frame"></div>
   </div>
 
-  <!-- touch joystick (touch mode) -->
+  <!-- touch controls -->
   <div id="touchUI" class="touch-ui hidden">
     <div class="joystick-zone" id="joyZone">
       <div class="joystick-base">
@@ -279,9 +342,11 @@
     </div>
     <button class="touch-btn boost" id="btnBoost">BOOST</button>
     <button class="touch-btn brake" id="btnBrake">BRAKE</button>
+    <button class="touch-btn fire" id="btnFire">🔫 FIRE</button>
+    <button class="touch-btn missile" id="btnMissile">🚀</button>
   </div>
 
-  <!-- center messages (combo, pickups, etc) -->
+  <!-- center messages -->
   <div id="bigMsg" class="big-msg"></div>
   <div id="comboFlash" class="combo-flash"></div>
 
@@ -300,15 +365,50 @@
   <!-- gameover overlay -->
   <div id="gameoverScreen" class="overlay hidden modal">
     <div class="modal-card">
-      <div class="go-tag">FLIGHT TERMINATED</div>
-      <h2>SKYRIFT</h2>
+      <div class="go-tag">SHIP DESTROYED</div>
+      <h2>SALVAGE 回収</h2>
       <div class="go-stats">
         <div><span>SCORE</span><b id="goScore">0</b></div>
-        <div><span>DISTANCE</span><b id="goDist">0 m</b></div>
-        <div><span>MAX COMBO</span><b id="goCombo">x1</b></div>
+        <div><span>STAGE</span><b id="goStage">1</b></div>
+        <div><span>💎 SALVAGE</span><b id="goSalvage">0</b></div>
+        <div><span>KILLS</span><b id="goKills">0</b></div>
       </div>
-      <button class="primary-btn" id="btnRetry">もう一度</button>
+      <p class="go-note">負けても回収したサルベージは保存され、強化に使えます。</p>
+      <button class="primary-btn" id="btnGoHangarFromGO">🛠 強化する</button>
+      <button class="ghost-btn" id="btnRetry">もう一度</button>
       <button class="ghost-btn" id="btnGoTitle">タイトルへ</button>
+    </div>
+  </div>
+
+  <!-- stage clear overlay -->
+  <div id="stageClearScreen" class="overlay hidden modal">
+    <div class="modal-card">
+      <div class="sc-tag">STAGE CLEAR</div>
+      <h2>STAGE <span id="scStage">1</span> 突破!</h2>
+      <div class="go-stats">
+        <div><span>BONUS SCORE</span><b id="scBonusScore">0</b></div>
+        <div><span>BONUS 💎</span><b id="scBonusSalvage">0</b></div>
+        <div><span>所持 💎</span><b id="scTotalSalvage">0</b></div>
+      </div>
+      <p class="sc-note">次は STAGE <b id="scNextStage">2</b>。強化してから挑むのも◎</p>
+      <button class="primary-btn" id="btnContinueStage">次のステージへ</button>
+      <button class="ghost-btn" id="btnGoHangarFromSC">🛠 強化してから</button>
+      <button class="ghost-btn" id="btnGoTitle2">タイトルへ</button>
+    </div>
+  </div>
+
+  <!-- victory overlay -->
+  <div id="victoryScreen" class="overlay hidden modal">
+    <div class="modal-card">
+      <div class="v-tag">🏆 VICTORY 🏆</div>
+      <h2>STARFORGE — 100 STAGE 制覇</h2>
+      <div class="go-stats">
+        <div><span>BEST SCORE</span><b id="vScore">0</b></div>
+        <div><span>TOTAL RUNS</span><b id="vRuns">0</b></div>
+        <div><span>TOTAL KILLS</span><b id="vKills">0</b></div>
+      </div>
+      <p class="sc-note">あなたは「DaDa-Survivor」を超えた。新たなる戦場で永遠の高みへ。</p>
+      <button class="primary-btn" id="btnGoTitle3">タイトルへ</button>
     </div>
   </div>
 
@@ -321,9 +421,6 @@
 <div id="speedLines" class="speed-lines"></div>
 <div id="vignette" class="vignette"></div>
 <div id="damageFlash" class="damage-flash"></div>
-
-<!-- ============== MEDIAPIPE (loaded on demand) ============== -->
-<!-- We load mediapipe via JS dynamically to keep first paint fast -->
 
 <script type="module" src="js/main.js"></script>
 </body>

@@ -1050,3 +1050,403 @@ canvas#gl{
   .crosshair svg{ width: 100px; height: 100px;}
   .joystick-base{ width: 110px; height: 110px;}
 }
+
+/* =========================================
+   STARFORGE — title stats / hangar / stage clear / victory
+========================================= */
+.title-stats{
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px; max-width: 480px; margin: 0 auto 18px;
+}
+.title-stat{
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 10px 8px;
+  background: var(--glass);
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+}
+.title-stat-label{
+  font-family:'Orbitron',sans-serif;
+  font-size: 9px; letter-spacing: 0.25em;
+  color: var(--text-dim);
+}
+.title-stat-value{
+  font-family:'Orbitron',sans-serif;
+  font-weight: 900;
+  font-size: 18px;
+  color: var(--accent-1);
+  text-shadow: 0 0 8px rgba(125,249,255,0.6);
+}
+
+.primary-ghost{
+  background: linear-gradient(135deg, rgba(125,249,255,0.18), rgba(179,136,255,0.18));
+  border-color: rgba(125,249,255,0.45);
+  color: var(--text);
+}
+
+/* HUD additions */
+.hud-pill.salvage-pill .pill-value{ color: #ffd86b; text-shadow: 0 0 8px rgba(255,216,107,0.6); }
+.hud-pill.stage-pill   .pill-value{ color: #b388ff; text-shadow: 0 0 8px rgba(179,136,255,0.6); }
+
+.hud-wave-wrap{
+  position: absolute;
+  top: calc(58px + var(--safe-top));
+  left: 50%; transform: translateX(-50%);
+  width: min(420px, 70vw);
+  text-align: center;
+  pointer-events: none;
+}
+.hud-wave-label{
+  font-family:'Orbitron',sans-serif;
+  font-size: 9px; letter-spacing: 0.3em;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.hud-wave-bar{
+  width: 100%; height: 4px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 99px; overflow: hidden;
+}
+.hud-wave-fill{
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, #7df9ff, #b388ff);
+  box-shadow: 0 0 8px rgba(125,249,255,0.6);
+  transition: width 0.2s ease;
+}
+
+.hud-boss-bar{
+  position: absolute;
+  top: calc(82px + var(--safe-top));
+  left: 50%; transform: translateX(-50%);
+  width: min(520px, 86vw);
+  pointer-events: none;
+}
+.hud-boss-bar.hidden{ display: none; }
+.hud-boss-label{
+  font-family:'Orbitron',sans-serif;
+  font-size: 11px; letter-spacing: 0.3em;
+  color: var(--accent-bad);
+  text-shadow: 0 0 8px rgba(255,59,107,0.7);
+  margin-bottom: 4px;
+  text-align: center;
+  animation: bossPulse 0.9s ease-in-out infinite;
+}
+@keyframes bossPulse{
+  0%,100%{ opacity: 0.85; }
+  50%{ opacity: 1; }
+}
+.hud-boss-track{
+  width: 100%; height: 8px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,59,107,0.5);
+  border-radius: 99px; overflow: hidden;
+  box-shadow: 0 0 16px rgba(255,59,107,0.3);
+}
+.hud-boss-fill{
+  height: 100%; width: 100%;
+  background: linear-gradient(90deg, #ff3b6b, #ff9b6e);
+  box-shadow: 0 0 10px rgba(255,59,107,0.7);
+  transition: width 0.2s ease;
+}
+
+/* HP bar */
+.hud-left{
+  position: absolute;
+  top: 50%; left: 14px;
+  transform: translateY(-50%);
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+}
+.hp-label{
+  font-family:'Orbitron',sans-serif;
+  font-size: 9px; letter-spacing: 0.3em;
+  color: var(--text-dim);
+}
+.hp-bar-wrap{
+  width: 14px; height: 200px;
+  position: relative;
+}
+.hp-bar{
+  position: absolute; inset: 0;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--stroke);
+  border-radius: 99px; overflow: hidden;
+}
+.hp-bar-fill{
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 100%;
+  background: linear-gradient(0deg, #ff3b6b 0%, #ffb547 35%, #7df9ff 70%, #88ffd6 100%);
+  box-shadow: 0 0 10px rgba(125,249,255,0.6);
+  transition: height 0.3s ease;
+}
+.hp-text{
+  position: absolute;
+  left: 22px; top: 50%; transform: translateY(-50%);
+  font-family:'Orbitron',sans-serif;
+  font-size: 11px; letter-spacing: 0.1em;
+  color: var(--accent-1);
+  text-shadow: 0 0 6px rgba(125,249,255,0.6);
+  white-space: nowrap;
+}
+
+.missile-readout{
+  display: flex; align-items: baseline; gap: 4px;
+  padding: 6px 10px;
+  background: rgba(10,14,39,0.55);
+  border: 1px solid rgba(255,216,107,0.4);
+  border-radius: 99px;
+  font-family:'Orbitron',sans-serif;
+  font-size: 12px;
+  color: #ffd86b;
+  text-shadow: 0 0 6px rgba(255,216,107,0.6);
+}
+.missile-readout.hidden{ display: none; }
+.missile-icon{ font-size: 14px; }
+.missile-max{ font-size: 10px; color: var(--text-dim); }
+
+/* Touch fire/missile buttons */
+.touch-btn.fire{
+  bottom: calc(260px + var(--safe-bottom));
+  right: 30px;
+  background: radial-gradient(circle, rgba(125,249,255,0.45), rgba(125,249,255,0.1));
+  border-color: rgba(125,249,255,0.8);
+  box-shadow: 0 0 18px rgba(125,249,255,0.55);
+  color: #cffcff;
+}
+.touch-btn.missile{
+  bottom: calc(260px + var(--safe-bottom));
+  right: 130px;
+  width: 70px; height: 70px;
+  background: radial-gradient(circle, rgba(255,216,107,0.45), rgba(255,216,107,0.1));
+  border-color: rgba(255,216,107,0.8);
+  box-shadow: 0 0 18px rgba(255,216,107,0.55);
+  color: #fff2c8;
+  font-size: 22px;
+}
+
+/* =========================================
+   HANGAR (UPGRADE SHOP)
+========================================= */
+.hangar-card{
+  width: min(620px, 96vw);
+  max-height: 90vh;
+  text-align: left;
+}
+.hangar-header{
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--stroke);
+}
+.hangar-tag{
+  display:inline-block;
+  font-family:'Orbitron',sans-serif;
+  font-size:10px; letter-spacing:0.4em;
+  color: var(--accent-2);
+  padding: 4px 10px; margin-bottom: 4px;
+  border:1px solid rgba(179,136,255,0.5); border-radius: 99px;
+}
+.hangar-stats{
+  display: flex; gap: 8px;
+}
+.hangar-stats > div{
+  display: flex; flex-direction: column; align-items: center;
+  padding: 6px 12px;
+  background: var(--glass);
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  min-width: 80px;
+}
+.hangar-stats span{
+  font-family:'Orbitron',sans-serif;
+  font-size: 9px; letter-spacing: 0.2em;
+  color: var(--text-dim);
+}
+.hangar-stats b{
+  font-family:'Orbitron',sans-serif;
+  font-size: 16px;
+  color: #ffd86b;
+  text-shadow: 0 0 6px rgba(255,216,107,0.6);
+}
+.hangar-list{
+  display: grid; gap: 10px;
+  max-height: 56vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.hangar-list::-webkit-scrollbar{ width: 6px; }
+.hangar-list::-webkit-scrollbar-thumb{ background: rgba(125,249,255,0.3); border-radius: 99px; }
+
+.upgrade-card{
+  padding: 12px 14px;
+  background: var(--glass);
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  transition: border-color 0.2s, background 0.2s;
+}
+.upgrade-card.affordable{
+  border-color: rgba(125,249,255,0.5);
+  background: linear-gradient(135deg, rgba(125,249,255,0.08), rgba(179,136,255,0.04));
+}
+.upgrade-card.maxed{
+  border-color: rgba(255,216,107,0.6);
+  background: linear-gradient(135deg, rgba(255,216,107,0.10), rgba(255,110,199,0.06));
+}
+.upgrade-head{
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 8px;
+}
+.upgrade-icon{
+  font-size: 24px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 6px rgba(125,249,255,0.5));
+}
+.upgrade-name{ flex: 1; }
+.upgrade-title{
+  font-weight: 900;
+  font-size: 14px;
+  color: var(--text);
+}
+.upgrade-desc{
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+.upgrade-lvl{
+  font-family:'Orbitron',sans-serif;
+  font-weight: 900;
+  font-size: 18px;
+  color: var(--accent-1);
+  text-shadow: 0 0 6px rgba(125,249,255,0.5);
+}
+.upgrade-lvl-max{
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.upgrade-bar{
+  width: 100%; height: 4px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 99px; overflow: hidden;
+  margin-bottom: 8px;
+}
+.upgrade-bar-fill{
+  height: 100%;
+  background: linear-gradient(90deg, #7df9ff, #b388ff, #ff6ec7);
+  box-shadow: 0 0 6px rgba(125,249,255,0.5);
+  transition: width 0.3s ease;
+}
+.upgrade-buy{
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.04);
+  color: var(--text-dim);
+  font-family:'Orbitron',sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.upgrade-buy.affordable{
+  background: linear-gradient(135deg, #7df9ff, #b388ff);
+  color: #0a0e27;
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(125,249,255,0.4);
+}
+.upgrade-buy.affordable:hover{
+  transform: translateY(-1px);
+  box-shadow: 0 6px 22px rgba(125,249,255,0.6);
+}
+.upgrade-buy.maxed{
+  background: linear-gradient(135deg, rgba(255,216,107,0.3), rgba(255,110,199,0.2));
+  color: #ffd86b;
+  border-color: rgba(255,216,107,0.6);
+}
+.upgrade-buy[disabled]{ cursor: not-allowed; opacity: 0.85; }
+
+.hangar-footer{
+  display: flex; gap: 10px; justify-content: space-between;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--stroke);
+}
+.warn-btn{
+  border-color: rgba(255,59,107,0.5);
+  color: var(--accent-bad);
+}
+.warn-btn:hover{
+  background: rgba(255,59,107,0.1);
+  border-color: rgba(255,59,107,0.8);
+}
+
+/* Stage clear / Victory */
+.sc-tag{
+  display:inline-block;
+  font-family:'Orbitron',sans-serif;
+  font-size:10px; letter-spacing:0.4em;
+  color: var(--accent-1);
+  padding: 4px 10px; margin-bottom: 8px;
+  border:1px solid rgba(125,249,255,0.5); border-radius: 99px;
+  background: rgba(125,249,255,0.06);
+}
+.v-tag{
+  display:inline-block;
+  font-family:'Orbitron',sans-serif;
+  font-weight: 900;
+  font-size:14px; letter-spacing:0.4em;
+  color: #ffd86b;
+  padding: 6px 14px; margin-bottom: 8px;
+  border:1px solid rgba(255,216,107,0.7); border-radius: 99px;
+  background: linear-gradient(135deg, rgba(255,216,107,0.18), rgba(255,110,199,0.12));
+  box-shadow: 0 0 22px rgba(255,216,107,0.45);
+  animation: vTagPulse 1.6s ease-in-out infinite;
+}
+@keyframes vTagPulse{
+  0%,100%{ box-shadow: 0 0 22px rgba(255,216,107,0.45); }
+  50%{ box-shadow: 0 0 32px rgba(255,216,107,0.85); }
+}
+.go-stats{
+  grid-template-columns: 1fr 1fr;
+}
+@media (min-width: 480px){
+  .go-stats{ grid-template-columns: repeat(4, 1fr); }
+}
+.go-note{
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin: 8px 0 14px;
+}
+.sc-note{
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 4px 0 14px;
+}
+.sc-note b{ color: var(--accent-1); }
+
+.modal-card .ghost-btn,
+.modal-card .primary-btn{
+  width: 100%;
+  margin-top: 6px;
+}
+
+/* responsive tweaks for STARFORGE buttons */
+@media (max-width: 480px){
+  .touch-btn.fire{
+    bottom: calc(220px + var(--safe-bottom));
+    right: 20px;
+  }
+  .touch-btn.missile{
+    bottom: calc(220px + var(--safe-bottom));
+    right: 110px;
+    width: 60px; height: 60px;
+    font-size: 18px;
+  }
+  .hud-wave-wrap{ width: 60vw; }
+  .hud-boss-bar{ width: 90vw; }
+  .hp-bar-wrap{ height: 160px; }
+  .hangar-stats{ flex-direction: column; gap: 4px; }
+  .hangar-stats > div{ min-width: 0; padding: 4px 8px; flex-direction: row; gap: 8px;}
+}

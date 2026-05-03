@@ -1,6 +1,7 @@
 // ===========================================================
-// audio.js — procedural audio engine using WebAudio
-// (No external audio files needed — keeps load instant)
+// audio.js — STARFORGE procedural audio engine (WebAudio)
+//   - SFX: laser, explosion, hit, missile, lockon, salvage, level up
+//   - Music: synthwave-ish ambient combat track
 // ===========================================================
 
 export class AudioEngine {
@@ -12,8 +13,9 @@ export class AudioEngine {
     this.musicNodes = [];
     this.musicPlaying = false;
     this.unlocked = false;
-    this.bgmVol = 0.5;
+    this.bgmVol = 0.45;
     this.sfxVol = 0.7;
+    this._lastLaser = 0;
   }
 
   async ensure() {
@@ -43,19 +45,87 @@ export class AudioEngine {
   setSfx(v) { this.sfxVol = v; if (this.sfxGain) this.sfxGain.gain.value = v; }
 
   // ----------------------- SFX -----------------------
-  blip(freq = 880, dur = 0.15, type = 'sine', vol = 0.3) {
+  laser() {
+    if (!this.ctx) return;
+    const now = performance.now();
+    if (now - this._lastLaser < 30) return;   // throttle
+    this._lastLaser = now;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(1700, t);
+    o.frequency.exponentialRampToValueAtTime(380, t + 0.10);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.25, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = 1100; f.Q.value = 4;
+    o.connect(f).connect(g).connect(this.sfxGain);
+    o.start(t); o.stop(t + 0.16);
+  }
+
+  enemyShot() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     const o = this.ctx.createOscillator();
     const g = this.ctx.createGain();
-    o.type = type;
-    o.frequency.setValueAtTime(freq, t);
+    o.type = 'square';
+    o.frequency.setValueAtTime(440, t);
+    o.frequency.exponentialRampToValueAtTime(180, t + 0.12);
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(vol, t + 0.005);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    g.gain.linearRampToValueAtTime(0.10, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
     o.connect(g).connect(this.sfxGain);
-    o.start(t);
-    o.stop(t + dur + 0.05);
+    o.start(t); o.stop(t + 0.18);
+  }
+
+  missile() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(140, t);
+    o.frequency.exponentialRampToValueAtTime(640, t + 0.55);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.22, t + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = 800; f.Q.value = 7;
+    o.connect(f).connect(g).connect(this.sfxGain);
+    o.start(t); o.stop(t + 0.65);
+  }
+
+  explosion(big = false) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    // noise burst
+    const dur = big ? 0.8 : 0.45;
+    const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * dur, this.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(big ? 2000 : 1400, t);
+    f.frequency.exponentialRampToValueAtTime(80, t + dur);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(big ? 0.85 : 0.6, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f).connect(g).connect(this.sfxGain);
+    src.start(t);
+    // sub thud
+    const o = this.ctx.createOscillator();
+    const og = this.ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(big ? 110 : 180, t);
+    o.frequency.exponentialRampToValueAtTime(40, t + dur);
+    og.gain.setValueAtTime(big ? 0.7 : 0.5, t);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(og).connect(this.sfxGain);
+    o.start(t); o.stop(t + dur + 0.05);
   }
 
   pickup() {
@@ -73,30 +143,9 @@ export class AudioEngine {
     o.start(t); o.stop(t + 0.25);
   }
 
-  ringPass() {
-    if (!this.ctx) return;
-    const t = this.ctx.currentTime;
-    [0, 0.06].forEach((d, i) => {
-      const o = this.ctx.createOscillator();
-      const g = this.ctx.createGain();
-      o.type = 'sawtooth';
-      o.frequency.setValueAtTime(440 * (i + 1), t + d);
-      o.frequency.exponentialRampToValueAtTime(1320 * (i + 1), t + d + 0.18);
-      g.gain.setValueAtTime(0, t + d);
-      g.gain.linearRampToValueAtTime(0.18, t + d + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.25);
-      const f = this.ctx.createBiquadFilter();
-      f.type = 'lowpass';
-      f.frequency.value = 2400;
-      o.connect(f).connect(g).connect(this.sfxGain);
-      o.start(t + d); o.stop(t + d + 0.3);
-    });
-  }
-
   hit() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    // noise burst
     const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.4, this.ctx.sampleRate);
     const data = buf.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
@@ -111,7 +160,6 @@ export class AudioEngine {
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
     src.connect(f).connect(g).connect(this.sfxGain);
     src.start(t);
-    // tonal thud
     const o = this.ctx.createOscillator();
     const og = this.ctx.createGain();
     o.type = 'sine';
@@ -123,21 +171,54 @@ export class AudioEngine {
     o.start(t); o.stop(t + 0.35);
   }
 
-  boostStart() {
+  bossWarning() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    const o = this.ctx.createOscillator();
-    const g = this.ctx.createGain();
-    o.type = 'sawtooth';
-    o.frequency.setValueAtTime(220, t);
-    o.frequency.exponentialRampToValueAtTime(880, t + 0.4);
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.18, t + 0.05);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
-    const f = this.ctx.createBiquadFilter();
-    f.type = 'bandpass'; f.frequency.value = 800; f.Q.value = 6;
-    o.connect(f).connect(g).connect(this.sfxGain);
-    o.start(t); o.stop(t + 0.5);
+    [220, 230, 220, 230].forEach((f, i) => {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(f, t + i * 0.20);
+      g.gain.setValueAtTime(0, t + i * 0.20);
+      g.gain.linearRampToValueAtTime(0.18, t + i * 0.20 + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.20 + 0.18);
+      const fl = this.ctx.createBiquadFilter();
+      fl.type = 'bandpass'; fl.frequency.value = 600; fl.Q.value = 4;
+      o.connect(fl).connect(g).connect(this.sfxGain);
+      o.start(t + i * 0.20); o.stop(t + i * 0.20 + 0.22);
+    });
+  }
+
+  stageClear() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    [523, 659, 784, 1047, 1319].forEach((f, i) => {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(f, t + i * 0.10);
+      g.gain.setValueAtTime(0, t + i * 0.10);
+      g.gain.linearRampToValueAtTime(0.22, t + i * 0.10 + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.10 + 0.4);
+      o.connect(g).connect(this.sfxGain);
+      o.start(t + i * 0.10); o.stop(t + i * 0.10 + 0.42);
+    });
+  }
+
+  levelUp() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    [440, 587, 880].forEach((f, i) => {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = 'square';
+      o.frequency.setValueAtTime(f, t + i * 0.07);
+      g.gain.setValueAtTime(0, t + i * 0.07);
+      g.gain.linearRampToValueAtTime(0.12, t + i * 0.07 + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.07 + 0.18);
+      o.connect(g).connect(this.sfxGain);
+      o.start(t + i * 0.07); o.stop(t + i * 0.07 + 0.2);
+    });
   }
 
   gameover() {
@@ -174,15 +255,13 @@ export class AudioEngine {
   }
 
   // ----------------------- MUSIC -----------------------
-  // Procedural ambient/synthwave loop. Arpeggio on a pad.
   startMusic() {
     if (!this.ctx || this.musicPlaying) return;
     this.musicPlaying = true;
     const ctx = this.ctx;
 
-    // Pad: two detuned saws through a slow lowpass sweep, with reverb-ish delay
     const padGain = ctx.createGain();
-    padGain.gain.value = 0.18;
+    padGain.gain.value = 0.16;
 
     const filt = ctx.createBiquadFilter();
     filt.type = 'lowpass';
@@ -195,7 +274,7 @@ export class AudioEngine {
     fb.gain.value = 0.32;
     delay.connect(fb).connect(delay);
     const wet = ctx.createGain();
-    wet.gain.value = 0.35;
+    wet.gain.value = 0.30;
     delay.connect(wet);
 
     padGain.connect(filt);
@@ -203,18 +282,19 @@ export class AudioEngine {
     filt.connect(delay);
     wet.connect(this.musicGain);
 
+    // dark space combat chord progression — Am, F, Cm, G
     const baseFreqs = [
-      [220, 277.18, 329.63], // A minor
-      [196, 246.94, 293.66], // G
-      [174.61, 220, 261.63], // F
-      [246.94, 311.13, 369.99] // B dim-ish
+      [110, 138.59, 164.81], // A minor (low)
+      [87.31, 110, 130.81],  // F
+      [130.81, 155.56, 196], // C minor
+      [98, 123.47, 146.83]   // G
     ];
 
     const oscs = [];
     for (let i = 0; i < 6; i++) {
       const o = ctx.createOscillator();
       o.type = i % 2 ? 'sawtooth' : 'triangle';
-      o.frequency.value = 220;
+      o.frequency.value = 110;
       o.detune.value = (i % 2 ? 7 : -7) * (1 + (i >> 1));
       const g = ctx.createGain();
       g.gain.value = 0;
@@ -235,16 +315,15 @@ export class AudioEngine {
         oscs[i].o.frequency.setTargetAtTime(f, now, 0.4);
         oscs[i].g.gain.setTargetAtTime(0.5 / oscs.length, now, 0.6);
       }
-      // gentle filter sweep
       filt.frequency.setTargetAtTime(500 + Math.sin((now - t0) * 0.3) * 350, now, 0.5);
       chordIdx++;
     };
     tick();
-    this._musicInterval = setInterval(tick, 4000);
+    this._musicInterval = setInterval(tick, 4200);
 
-    // arp lead
+    // arp
     const arpGain = ctx.createGain();
-    arpGain.gain.value = 0.07;
+    arpGain.gain.value = 0.06;
     arpGain.connect(this.musicGain);
     arpGain.connect(delay);
 
@@ -260,14 +339,30 @@ export class AudioEngine {
       if (!this.musicPlaying) return;
       const now = ctx.currentTime;
       const chord = baseFreqs[chordIdx % baseFreqs.length];
-      const note = chord[step % chord.length] * 2;
+      const note = chord[step % chord.length] * 4;
       arpO.frequency.setValueAtTime(note, now);
       arpG.gain.cancelScheduledValues(now);
       arpG.gain.setValueAtTime(0.0001, now);
-      arpG.gain.exponentialRampToValueAtTime(0.6, now + 0.01);
+      arpG.gain.exponentialRampToValueAtTime(0.55, now + 0.01);
       arpG.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
       step++;
     }, 240);
+
+    // bass kick on every other beat
+    this._kickInterval = setInterval(() => {
+      if (!this.musicPlaying) return;
+      const now = ctx.currentTime;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(80, now);
+      o.frequency.exponentialRampToValueAtTime(40, now + 0.18);
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(0.35, now + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+      o.connect(g).connect(this.musicGain);
+      o.start(now); o.stop(now + 0.22);
+    }, 480);
 
     this.musicNodes = [padGain, filt, delay, fb, wet, arpGain, arpO, arpG, ...oscs.map(x => x.o)];
   }
@@ -276,6 +371,7 @@ export class AudioEngine {
     this.musicPlaying = false;
     clearInterval(this._musicInterval);
     clearInterval(this._arpInterval);
+    clearInterval(this._kickInterval);
     try { this.musicNodes.forEach(n => { try { n.stop && n.stop(); } catch {} try { n.disconnect && n.disconnect(); } catch {} }); } catch {}
     this.musicNodes = [];
   }

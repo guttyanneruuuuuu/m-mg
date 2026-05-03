@@ -1,21 +1,22 @@
 // ===========================================================
-// world.js — procedural infinite sky world.   (v2)
-//   - Sky / sun / atmosphere shader
-//   - Volumetric-ish layered clouds
-//   - Floating islands (smooth Genshin-like aesthetic, NOT cubic)
-//   - Star clouds, pickup rings, crystals, hazards
-//   - Light shafts streaming through clouds
+// world.js — STARFORGE: deep space combat arena
+//   - Procedural starfield, nebula clouds, distant planets
+//   - Asteroid hazards (destructible -> drop salvage points)
+//   - Drifting space debris / abandoned stations as set pieces
+//   - Power capsules (shield / energy / mega salvage)
+//   - Enemy spawning is delegated to main.js / EnemyManager,
+//     but world-scale background is fully space-themed.
 // ===========================================================
 
 import * as THREE from 'three';
 import { rand, randInt, choose, clamp, lerp } from './utils.js';
 
-const ISLAND_PALETTES = [
-  { rock: 0x6f5b8d, grass: 0x65d394, glow: 0x7df9ff, accent: 0xb388ff }, // dawn lavender
-  { rock: 0x8b6f4e, grass: 0x9cd86a, glow: 0xffd86b, accent: 0xff9b6e }, // sunset
-  { rock: 0x4a5d8c, grass: 0x60c0d4, glow: 0x7df9ff, accent: 0x6ec0ff }, // azure
-  { rock: 0x6e4b6e, grass: 0xff95c8, glow: 0xff6ec7, accent: 0xb388ff }, // sakura
-  { rock: 0x3a4a6e, grass: 0x8ad8ff, glow: 0xc4b5ff, accent: 0xffffff }  // arctic dream
+const NEBULA_PALETTES = [
+  { c1: 0x4a1f6b, c2: 0x1f4a8b, c3: 0xff5fa2, name: 'violet rift' },
+  { c1: 0x0a2a55, c2: 0x6b1f4a, c3: 0x7df9ff, name: 'azure storm' },
+  { c1: 0x2a0a3a, c2: 0x4a1f1f, c3: 0xff7d3a, name: 'crimson cluster' },
+  { c1: 0x1a3a5a, c2: 0x2a1a5a, c3: 0x88ffd6, name: 'cyan frontier' },
+  { c1: 0x3a1a4a, c2: 0x1a3a3a, c3: 0xc4b5ff, name: 'amethyst veil' },
 ];
 
 export class World {
@@ -27,83 +28,45 @@ export class World {
     this.scene.add(this.root);
 
     this.chunks = [];
-    this.chunkLength = 220;
+    this.chunkLength = 240;
     this.aheadChunks = quality === 'high' ? 8 : quality === 'med' ? 6 : 5;
     this.behindChunks = 1;
     this.spawnZ = 0;
     this.travelled = 0;
+    this.stage = 1;
+    this.palette = choose(NEBULA_PALETTES);
 
-    this._setupSky();
+    this._setupSpace();
     this._setupLights();
-    this._setupOcean();
-    this._setupClouds();
-    this._setupStars();
-    this._setupGodRays();
+    this._setupStarfield();
+    this._setupNebula();
+    this._setupDistantPlanets();
   }
 
-  // -----------------------------------------------------------
-  // God-rays / light shafts streaming from the sun
-  _setupGodRays() {
-    const COUNT = this.quality === 'high' ? 14 : this.quality === 'med' ? 9 : 6;
-    const grp = new THREE.Group();
-    const tex = this._makeRayTexture();
-    for (let i = 0; i < COUNT; i++) {
-      const m = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: tex,
-        color: i % 3 === 0 ? 0xfff2c8 : 0xffd6a0,
-        transparent: true,
-        depthWrite: false,
-        opacity: 0.0,                         // fade in over time
-        blending: THREE.AdditiveBlending,
-        rotation: rand(-0.3, 0.3)
-      }));
-      const a = rand(0, Math.PI * 2);
-      const r = rand(220, 360);
-      m.position.set(Math.cos(a) * r, rand(40, 120), -260 - Math.random() * 200);
-      const w = rand(80, 160), h = rand(280, 420);
-      m.scale.set(w, h, 1);
-      m.userData = { baseOpacity: rand(0.06, 0.22), phase: rand(0, Math.PI * 2) };
-      grp.add(m);
+  setStage(stage) {
+    this.stage = stage;
+    // shift palette every few stages
+    const idx = Math.floor((stage - 1) / 3) % NEBULA_PALETTES.length;
+    const p = NEBULA_PALETTES[idx];
+    this.palette = p;
+    if (this.nebulaA) {
+      this.nebulaA.material.uniforms.c1.value.set(p.c1);
+      this.nebulaA.material.uniforms.c2.value.set(p.c2);
+      this.nebulaA.material.uniforms.c3.value.set(p.c3);
     }
-    this.scene.add(grp);
-    this.godRays = grp;
-  }
-
-  _makeRayTexture() {
-    const c = document.createElement('canvas');
-    c.width = 64; c.height = 256;
-    const g = c.getContext('2d');
-    const grd = g.createLinearGradient(32, 0, 32, 256);
-    grd.addColorStop(0,    'rgba(255,255,255,0)');
-    grd.addColorStop(0.4,  'rgba(255,255,255,0.55)');
-    grd.addColorStop(1,    'rgba(255,255,255,0)');
-    g.fillStyle = grd;
-    g.fillRect(0, 0, 64, 256);
-    // soft horizontal falloff
-    const grd2 = g.createLinearGradient(0, 0, 64, 0);
-    grd2.addColorStop(0, 'rgba(0,0,0,1)');
-    grd2.addColorStop(0.5,'rgba(0,0,0,0)');
-    grd2.addColorStop(1, 'rgba(0,0,0,1)');
-    g.globalCompositeOperation = 'destination-out';
-    g.fillStyle = grd2;
-    g.fillRect(0, 0, 64, 256);
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
   }
 
   // -----------------------------------------------------------
-  _setupSky() {
-    const geo = new THREE.SphereGeometry(2400, 48, 24);
+  _setupSpace() {
+    // Deep starry void backdrop with subtle nebula color
+    const geo = new THREE.SphereGeometry(2800, 48, 24);
     const mat = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       depthWrite: false,
       uniforms: {
-        topColor: { value: new THREE.Color(0x0a1238) },
-        midColor: { value: new THREE.Color(0x9c5fff) },
-        botColor: { value: new THREE.Color(0xff8fb1) },
-        sunDir:   { value: new THREE.Vector3(0.3, 0.45, -0.85).normalize() },
-        sunColor: { value: new THREE.Color(0xfff2c8) },
+        topColor: { value: new THREE.Color(0x010109) },
+        midColor: { value: new THREE.Color(0x0a0822) },
+        botColor: { value: new THREE.Color(0x05030f) },
         time:     { value: 0 }
       },
       vertexShader: `
@@ -117,20 +80,21 @@ export class World {
         uniform vec3 topColor;
         uniform vec3 midColor;
         uniform vec3 botColor;
-        uniform vec3 sunDir;
-        uniform vec3 sunColor;
         uniform float time;
         varying vec3 vN;
+        // hash-based subtle nebula tint
+        float hash(vec3 p){
+          p = fract(p * 0.3183099 + 0.1);
+          p *= 17.0;
+          return fract(p.x*p.y*p.z*(p.x+p.y+p.z));
+        }
         void main(){
-          float h = clamp((vN.y + 0.2) * 0.7, 0.0, 1.0);
-          vec3 col = mix(botColor, midColor, smoothstep(0.0, 0.5, h));
-          col = mix(col, topColor, smoothstep(0.45, 1.0, h));
-          float sd = max(dot(vN, sunDir), 0.0);
-          col += sunColor * pow(sd, 320.0) * 1.8;
-          col += sunColor * pow(sd, 12.0) * 0.14;
-          // aurora-ish bands
-          float band = sin((vN.y + time * 0.02) * 30.0) * 0.5 + 0.5;
-          col += vec3(0.05, 0.10, 0.18) * band * smoothstep(0.4, 0.9, h);
+          float h = clamp((vN.y + 1.0) * 0.5, 0.0, 1.0);
+          vec3 col = mix(botColor, midColor, smoothstep(0.0, 0.6, h));
+          col = mix(col, topColor, smoothstep(0.6, 1.0, h));
+          // ultra-faint nebula tint
+          float n = hash(floor(vN * 8.0));
+          col += vec3(0.03, 0.02, 0.06) * n;
           gl_FragColor = vec4(col, 1.0);
         }
       `
@@ -139,159 +103,72 @@ export class World {
     this.sky.frustumCulled = false;
     this.scene.add(this.sky);
 
-    this.scene.fog = new THREE.FogExp2(0xa48fff, 0.0016);
+    this.scene.fog = new THREE.FogExp2(0x05030f, 0.0010);
   }
 
   _setupLights() {
-    const hemi = new THREE.HemisphereLight(0xc0d6ff, 0xff9fb8, 0.65);
+    const hemi = new THREE.HemisphereLight(0x6080ff, 0x110024, 0.45);
     this.scene.add(hemi);
 
-    const dir = new THREE.DirectionalLight(0xfff2cc, 1.4);
-    dir.position.set(80, 130, -60);
+    // distant blue-white star (key light)
+    const dir = new THREE.DirectionalLight(0xb6d8ff, 0.95);
+    dir.position.set(60, 80, -100);
     this.scene.add(dir);
-    this.sunLight = dir;
+    this.starLight = dir;
 
-    const fill = new THREE.DirectionalLight(0x7df9ff, 0.55);
-    fill.position.set(-60, 30, 60);
-    this.scene.add(fill);
-
-    // accent rim
-    const rim = new THREE.DirectionalLight(0xff6ec7, 0.25);
-    rim.position.set(20, -40, 100);
+    // magenta rim from a red-giant nearby
+    const rim = new THREE.DirectionalLight(0xff5fa2, 0.55);
+    rim.position.set(-100, -20, -40);
     this.scene.add(rim);
+
+    // cyan fill
+    const fill = new THREE.DirectionalLight(0x7df9ff, 0.25);
+    fill.position.set(20, 40, 80);
+    this.scene.add(fill);
   }
 
-  _setupOcean() {
-    const geo = new THREE.PlaneGeometry(7000, 7000, 80, 80);
-    const mat = new THREE.ShaderMaterial({
-      transparent: true,
-      uniforms: {
-        time: { value: 0 },
-        c1: { value: new THREE.Color(0xffd6f3) },
-        c2: { value: new THREE.Color(0xb388ff) },
-        c3: { value: new THREE.Color(0x7df9ff) }
-      },
-      vertexShader: `
-        uniform float time;
-        varying vec2 vUv;
-        varying float vH;
-        void main(){
-          vUv = uv;
-          vec3 p = position;
-          float w = sin(p.x*0.012 + time*0.4) * cos(p.y*0.014 + time*0.3) * 22.0
-                  + sin(p.x*0.04 + time*0.9) * 5.0
-                  + cos(p.y*0.03 + time*0.6) * 4.0;
-          p.z += w;
-          vH = w;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(p,1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform vec3 c1; uniform vec3 c2; uniform vec3 c3;
-        varying vec2 vUv;
-        varying float vH;
-        void main(){
-          vec3 col = mix(c1, c2, vUv.y);
-          col = mix(col, c3, smoothstep(-15.0, 22.0, vH) * 0.6);
-          float a = 0.55 + 0.30 * smoothstep(-15.0, 26.0, vH);
-          gl_FragColor = vec4(col, a);
-        }
-      `
-    });
-    const m = new THREE.Mesh(geo, mat);
-    m.rotation.x = -Math.PI / 2;
-    m.position.y = -130;
-    m.frustumCulled = false;
-    this.scene.add(m);
-    this.ocean = m;
-  }
-
-  _setupClouds() {
-    // Soft puffy clouds as billboards. 3 layers for parallax depth.
-    const tex = this._makeCloudTexture();
-    this.cloudLayers = [];
-    const counts = this.quality === 'high' ? [40, 30, 20] : this.quality === 'med' ? [28, 22, 14] : [18, 14, 8];
-    const distances = [180, 320, 520];
-    const sizes = [40, 70, 120];
-
-    for (let layer = 0; layer < 3; layer++) {
-      const grp = new THREE.Group();
-      for (let i = 0; i < counts[layer]; i++) {
-        const m = new THREE.Sprite(new THREE.SpriteMaterial({
-          map: tex,
-          color: new THREE.Color().setHSL(rand(0.7, 0.95), 0.4, rand(0.7, 0.95)),
-          transparent: true,
-          depthWrite: false,
-          opacity: rand(0.45, 0.9),
-          blending: THREE.NormalBlending
-        }));
-        const a = rand(0, Math.PI * 2);
-        const r = rand(distances[layer] * 0.4, distances[layer]);
-        m.position.set(Math.cos(a) * r, rand(-30, 60), Math.sin(a) * r);
-        const s = rand(sizes[layer] * 0.7, sizes[layer]);
-        m.scale.set(s, s * 0.5, 1);
-        grp.add(m);
+  _setupStarfield() {
+    // Three layers of stars (near/mid/far) for parallax depth
+    this.starLayers = [];
+    const counts = this.quality === 'high'
+      ? [1500, 900, 400]
+      : this.quality === 'med' ? [900, 600, 280] : [600, 360, 180];
+    const radii = [800, 1400, 2100];
+    const sizes = [3.2, 5.5, 7.0];
+    const tex = this._makeSpriteTexture();
+    for (let li = 0; li < 3; li++) {
+      const COUNT = counts[li];
+      const positions = new Float32Array(COUNT * 3);
+      const colors    = new Float32Array(COUNT * 3);
+      for (let i = 0; i < COUNT; i++) {
+        const r = radii[li] * (0.6 + Math.random() * 0.8);
+        const a = Math.random() * Math.PI * 2;
+        const b = (Math.random() - 0.5) * Math.PI;
+        positions[i*3+0] = Math.cos(a) * Math.cos(b) * r;
+        positions[i*3+1] = Math.sin(b) * r;
+        positions[i*3+2] = Math.sin(a) * Math.cos(b) * r;
+        const hueR = Math.random();
+        let c;
+        if (hueR < 0.7) c = new THREE.Color().setHSL(0.58, 0.1, rand(0.7, 1.0)); // white-blue
+        else if (hueR < 0.88) c = new THREE.Color().setHSL(rand(0.55, 0.65), 0.6, 0.8); // cyan
+        else if (hueR < 0.96) c = new THREE.Color().setHSL(rand(0.85, 0.95), 0.8, 0.7); // magenta
+        else                  c = new THREE.Color().setHSL(rand(0.05, 0.10), 0.8, 0.7); // amber
+        colors[i*3+0] = c.r; colors[i*3+1] = c.g; colors[i*3+2] = c.b;
       }
-      this.scene.add(grp);
-      this.cloudLayers.push({ grp, parallax: 0.4 + layer * 0.25 });
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geo.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
+      const mat = new THREE.PointsMaterial({
+        size: sizes[li], sizeAttenuation: true,
+        vertexColors: true, transparent: true,
+        depthWrite: false, blending: THREE.AdditiveBlending,
+        map: tex, opacity: 0.95
+      });
+      const pts = new THREE.Points(geo, mat);
+      pts.frustumCulled = false;
+      this.scene.add(pts);
+      this.starLayers.push({ pts, parallax: 0.2 + li * 0.25 });
     }
-  }
-
-  _makeCloudTexture() {
-    const c = document.createElement('canvas');
-    c.width = c.height = 256;
-    const g = c.getContext('2d');
-    // soft radial gradient with slight noise
-    const grd = g.createRadialGradient(128, 128, 10, 128, 128, 128);
-    grd.addColorStop(0,   'rgba(255,255,255,1)');
-    grd.addColorStop(0.4, 'rgba(255,255,255,0.7)');
-    grd.addColorStop(0.7, 'rgba(255,255,255,0.25)');
-    grd.addColorStop(1,   'rgba(255,255,255,0)');
-    g.fillStyle = grd;
-    g.fillRect(0, 0, 256, 256);
-    // splotch pattern for organic shape
-    g.globalAlpha = 0.5;
-    for (let i = 0; i < 25; i++) {
-      const x = 128 + (Math.random() - 0.5) * 120;
-      const y = 128 + (Math.random() - 0.5) * 60;
-      const r = 30 + Math.random() * 40;
-      const g2 = g.createRadialGradient(x, y, 0, x, y, r);
-      g2.addColorStop(0, 'rgba(255,255,255,0.9)');
-      g2.addColorStop(1, 'rgba(255,255,255,0)');
-      g.fillStyle = g2;
-      g.fillRect(x - r, y - r, r * 2, r * 2);
-    }
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
-  }
-
-  _setupStars() {
-    const COUNT = this.quality === 'high' ? 900 : this.quality === 'med' ? 550 : 320;
-    const positions = new Float32Array(COUNT * 3);
-    const colors    = new Float32Array(COUNT * 3);
-    for (let i = 0; i < COUNT; i++) {
-      const r = 700 + Math.random() * 900;
-      const a = Math.random() * Math.PI * 2;
-      const b = (Math.random() - 0.5) * Math.PI * 0.6;
-      positions[i * 3 + 0] = Math.cos(a) * Math.cos(b) * r;
-      positions[i * 3 + 1] = Math.sin(b) * r * 0.6 + 100;
-      positions[i * 3 + 2] = Math.sin(a) * Math.cos(b) * r;
-      const c = new THREE.Color().setHSL(rand(0.5, 0.9), 0.7, 0.75);
-      colors[i*3+0] = c.r; colors[i*3+1] = c.g; colors[i*3+2] = c.b;
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
-    const mat = new THREE.PointsMaterial({
-      size: 4.4, sizeAttenuation: true,
-      vertexColors: true, transparent: true,
-      depthWrite: false, blending: THREE.AdditiveBlending,
-      map: this._makeSpriteTexture(), opacity: 0.95
-    });
-    this.stars = new THREE.Points(geo, mat);
-    this.stars.frustumCulled = false;
-    this.scene.add(this.stars);
   }
 
   _makeSpriteTexture() {
@@ -300,7 +177,7 @@ export class World {
     const g = c.getContext('2d');
     const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
     grd.addColorStop(0, 'rgba(255,255,255,1)');
-    grd.addColorStop(0.3, 'rgba(255,255,255,0.7)');
+    grd.addColorStop(0.3, 'rgba(255,255,255,0.6)');
     grd.addColorStop(1, 'rgba(255,255,255,0)');
     g.fillStyle = grd;
     g.fillRect(0, 0, 64, 64);
@@ -309,8 +186,140 @@ export class World {
     return tex;
   }
 
+  _setupNebula() {
+    // big additive plane behind everything that paints nebula clouds
+    const geo = new THREE.SphereGeometry(2200, 48, 24);
+    const p = this.palette;
+    const mat = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: false,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      uniforms: {
+        c1: { value: new THREE.Color(p.c1) },
+        c2: { value: new THREE.Color(p.c2) },
+        c3: { value: new THREE.Color(p.c3) },
+        time: { value: 0 }
+      },
+      vertexShader: `
+        varying vec3 vN;
+        void main(){
+          vN = normalize(position);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 c1; uniform vec3 c2; uniform vec3 c3;
+        uniform float time;
+        varying vec3 vN;
+
+        // simple 3D noise
+        float hash(vec3 p){
+          p = fract(p*0.3183099+0.1); p*=17.0;
+          return fract(p.x*p.y*p.z*(p.x+p.y+p.z));
+        }
+        float noise(vec3 p){
+          vec3 i = floor(p);
+          vec3 f = fract(p);
+          f = f*f*(3.0-2.0*f);
+          float n000 = hash(i+vec3(0,0,0));
+          float n100 = hash(i+vec3(1,0,0));
+          float n010 = hash(i+vec3(0,1,0));
+          float n110 = hash(i+vec3(1,1,0));
+          float n001 = hash(i+vec3(0,0,1));
+          float n101 = hash(i+vec3(1,0,1));
+          float n011 = hash(i+vec3(0,1,1));
+          float n111 = hash(i+vec3(1,1,1));
+          float nx00 = mix(n000,n100,f.x);
+          float nx10 = mix(n010,n110,f.x);
+          float nx01 = mix(n001,n101,f.x);
+          float nx11 = mix(n011,n111,f.x);
+          float nxy0 = mix(nx00,nx10,f.y);
+          float nxy1 = mix(nx01,nx11,f.y);
+          return mix(nxy0,nxy1,f.z);
+        }
+        float fbm(vec3 p){
+          float a = 0.5; float v = 0.0;
+          for(int i=0;i<5;i++){
+            v += a*noise(p);
+            p *= 2.0; a *= 0.5;
+          }
+          return v;
+        }
+        void main(){
+          vec3 q = vN * 2.5;
+          q.x += time*0.005;
+          float n = fbm(q);
+          float n2 = fbm(q*1.8 + 4.0);
+          vec3 col = mix(c1, c2, n);
+          col = mix(col, c3, smoothstep(0.45, 0.85, n2));
+          float a = smoothstep(0.25, 0.85, n) * 0.55;
+          gl_FragColor = vec4(col*a, a);
+        }
+      `
+    });
+    this.nebulaA = new THREE.Mesh(geo, mat);
+    this.nebulaA.frustumCulled = false;
+    this.scene.add(this.nebulaA);
+  }
+
+  _setupDistantPlanets() {
+    const grp = new THREE.Group();
+    const COUNT = this.quality === 'high' ? 4 : 3;
+    const planetTypes = [
+      { color: 0x6e7dff, ring: false, glow: 0xb388ff },
+      { color: 0xff8a4a, ring: true,  glow: 0xffb547 },
+      { color: 0x8effb5, ring: false, glow: 0x88ffd6 },
+      { color: 0xffd86b, ring: true,  glow: 0xff7d3a },
+      { color: 0xc06bff, ring: false, glow: 0xff5fa2 },
+    ];
+    for (let i = 0; i < COUNT; i++) {
+      const t = choose(planetTypes);
+      const r = rand(60, 130);
+      const planet = new THREE.Mesh(
+        new THREE.SphereGeometry(r, 28, 20),
+        new THREE.MeshStandardMaterial({
+          color: t.color, roughness: 0.85, metalness: 0.1,
+          emissive: t.glow, emissiveIntensity: 0.08
+        })
+      );
+      const a = rand(0, Math.PI * 2);
+      const dist = rand(900, 1500);
+      planet.position.set(Math.cos(a) * dist, rand(-200, 250), Math.sin(a) * dist - 200);
+      grp.add(planet);
+
+      // halo
+      const halo = new THREE.Mesh(
+        new THREE.SphereGeometry(r * 1.18, 24, 16),
+        new THREE.MeshBasicMaterial({
+          color: t.glow, transparent: true, opacity: 0.10,
+          blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide
+        })
+      );
+      halo.position.copy(planet.position);
+      grp.add(halo);
+
+      if (t.ring) {
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(r * 1.5, r * 2.4, 64),
+          new THREE.MeshBasicMaterial({
+            color: t.glow, transparent: true, opacity: 0.45,
+            blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+          })
+        );
+        ring.rotation.x = rand(0.7, 1.4);
+        ring.rotation.y = rand(0, Math.PI);
+        ring.position.copy(planet.position);
+        grp.add(ring);
+      }
+      planet.userData.spinSpeed = rand(0.005, 0.02);
+    }
+    this.planets = grp;
+    this.scene.add(grp);
+  }
+
   // -----------------------------------------------------------
-  // CHUNKS
+  // CHUNKS — asteroid fields, debris, capsules, set pieces
   // -----------------------------------------------------------
   prime() {
     for (let i = 0; i < this.aheadChunks; i++) this._spawnChunk();
@@ -320,63 +329,43 @@ export class World {
     const z = this.spawnZ - this.chunkLength;
     const chunk = new THREE.Group();
     chunk.position.z = z;
-    chunk.userData = { z, pickups: [], hazards: [], rings: [], crystals: [] };
+    chunk.userData = { z, hazards: [], crystals: [], rings: [] };
 
-    const palette = choose(ISLAND_PALETTES);
-    const variation = (this.travelled + Math.abs(z)) / 5000;
-
-    const n = randInt(2, 4);
-    for (let i = 0; i < n; i++) {
-      const x = rand(-90, 90);
-      const y = rand(-30, 50);
-      const lz = rand(-this.chunkLength + 20, -20);
-      this._spawnIsland(chunk, x, y, lz, palette, variation);
+    // ASTEROIDS — destructible. dense in some chunks (asteroid fields)
+    const fieldDense = Math.random() < 0.35;
+    const asteroidCount = fieldDense ? randInt(8, 14) : randInt(3, 6);
+    for (let i = 0; i < asteroidCount; i++) {
+      const lx = rand(-90, 90);
+      const ly = rand(-50, 50);
+      const lz = rand(-this.chunkLength + 10, -10);
+      this._spawnAsteroid(chunk, lx, ly, lz);
     }
 
-    const rings = randInt(3, 5);
-    for (let i = 0; i < rings; i++) {
-      const t = (i + rand(0.1, 0.9)) / rings;
-      const lz = -t * this.chunkLength;
-      const lx = Math.sin((Math.abs(z) * 0.002) + i * 1.7) * 38;
-      const ly = Math.cos((Math.abs(z) * 0.003) + i * 2.3) * 22 + 8;
-      this._spawnRing(chunk, lx, ly, lz);
-    }
-
-    const crystals = randInt(6, 11);
+    // SALVAGE CRYSTALS (regular score pickups)
+    const crystals = randInt(5, 9);
     for (let i = 0; i < crystals; i++) {
       const t = (i + rand(0.05, 0.95)) / crystals;
       const lz = -t * this.chunkLength;
-      const lx = rand(-65, 65);
-      const ly = rand(-22, 38);
-      this._spawnCrystal(chunk, lx, ly, lz);
+      const lx = rand(-70, 70);
+      const ly = rand(-35, 35);
+      this._spawnSalvage(chunk, lx, ly, lz);
     }
 
-    // Special pickups (rare): shield, time-slow, mega-coin
+    // POWER CAPSULES — rare
     if (Math.random() < 0.55) {
       const lz = rand(-this.chunkLength + 20, -20);
-      const lx = rand(-50, 50);
-      const ly = rand(-15, 30);
-      const kinds = ['shield', 'slowmo', 'mega'];
+      const lx = rand(-60, 60);
+      const ly = rand(-25, 25);
+      const kinds = ['shield', 'energy', 'mega'];
       this._spawnPower(chunk, lx, ly, lz, choose(kinds));
     }
 
-    // Score gates — narrow lit gates worth big points + multiplier
-    if (Math.random() < 0.35) {
-      const lz = rand(-this.chunkLength + 30, -30);
-      const lx = rand(-30, 30);
-      const ly = rand(-10, 25);
-      this._spawnGate(chunk, lx, ly, lz);
-    }
-
-    const hazardChance = clamp(0.25 + variation * 0.3, 0.25, 0.85);
-    const haz = randInt(1, 3 + Math.floor(variation * 2));
-    for (let i = 0; i < haz; i++) {
-      if (Math.random() > hazardChance) continue;
-      const lx = rand(-72, 72);
-      const ly = rand(-15, 32);
-      const lz = rand(-this.chunkLength + 10, -10);
-      if (Math.random() < 0.55) this._spawnStorm(chunk, lx, ly, lz);
-      else this._spawnRock(chunk, lx, ly, lz);
+    // DERELICT — rare big set piece
+    if (Math.random() < 0.18) {
+      const lx = rand(-80, 80);
+      const ly = rand(-40, 40);
+      const lz = rand(-this.chunkLength + 40, -40);
+      this._spawnDerelict(chunk, lx, ly, lz);
     }
 
     this.root.add(chunk);
@@ -384,175 +373,78 @@ export class World {
     this.spawnZ = z;
   }
 
-  _spawnIsland(parent, x, y, z, palette, variation) {
+  _spawnAsteroid(parent, x, y, z) {
     const grp = new THREE.Group();
     grp.position.set(x, y, z);
-    grp.rotation.y = rand(0, Math.PI * 2);
-
-    const radius = rand(8, 16);
-    const baseGeo = new THREE.IcosahedronGeometry(radius, this.quality === 'high' ? 3 : 2);
-    const pos = baseGeo.attributes.position;
+    const r = rand(2.2, 5.5);
+    const geo = new THREE.IcosahedronGeometry(r, 1);
+    const pos = geo.attributes.position;
     const v = new THREE.Vector3();
     for (let i = 0; i < pos.count; i++) {
       v.fromBufferAttribute(pos, i);
-      const n = (Math.sin(v.x * 0.4) + Math.cos(v.z * 0.5) + Math.sin(v.y * 0.6)) * 0.6;
-      v.multiplyScalar(1 + n * 0.06);
-      if (v.y < 0) v.y *= 1.5 + Math.random() * 0.5;
+      v.multiplyScalar(1 + (Math.random() - 0.4) * 0.35);
       pos.setXYZ(i, v.x, v.y, v.z);
     }
-    baseGeo.computeVertexNormals();
-
-    const rockMat = new THREE.MeshStandardMaterial({
-      color: palette.rock, roughness: 0.85, metalness: 0.05, flatShading: false
+    geo.computeVertexNormals();
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x4a4658, roughness: 0.95, metalness: 0.15,
+      emissive: 0x221a35, emissiveIntensity: 0.3,
+      flatShading: true
     });
-    const base = new THREE.Mesh(baseGeo, rockMat);
-    grp.add(base);
+    const m = new THREE.Mesh(geo, mat);
+    grp.add(m);
 
-    const capGeo = new THREE.SphereGeometry(radius * 0.95, 28, 16, 0, Math.PI * 2, 0, Math.PI * 0.5);
-    const capMat = new THREE.MeshStandardMaterial({
-      color: palette.grass, roughness: 0.7, metalness: 0.0,
-      emissive: new THREE.Color(palette.grass).multiplyScalar(0.06)
-    });
-    const cap = new THREE.Mesh(capGeo, capMat);
-    cap.position.y = radius * 0.05;
-    cap.scale.set(1.02, 0.55, 1.02);
-    grp.add(cap);
-
-    const ringGeo = new THREE.TorusGeometry(radius * 1.2, 0.4, 12, 56);
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: palette.glow, transparent: true, opacity: 0.5,
-      blending: THREE.AdditiveBlending, depthWrite: false
-    });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.rotation.x = Math.PI / 2;
-    ring.position.y = -radius * 0.6;
-    grp.add(ring);
-
-    const spires = randInt(2, 5);
-    for (let i = 0; i < spires; i++) {
-      const sh = rand(2.5, 5.5);
-      const sg = new THREE.ConeGeometry(rand(0.6, 1.2), sh, 12);
-      const sm = new THREE.MeshStandardMaterial({
-        color: palette.accent,
-        emissive: new THREE.Color(palette.accent).multiplyScalar(0.3),
-        roughness: 0.4, metalness: 0.1
-      });
-      const s = new THREE.Mesh(sg, sm);
-      const a = rand(0, Math.PI * 2);
-      const r = rand(radius * 0.3, radius * 0.85);
-      s.position.set(Math.cos(a) * r, radius * 0.4 + sh * 0.5, Math.sin(a) * r);
-      grp.add(s);
-    }
-
-    if (Math.random() < 0.7) {
-      const fc = new THREE.Mesh(
-        new THREE.OctahedronGeometry(rand(0.8, 1.4)),
-        new THREE.MeshStandardMaterial({
-          color: palette.glow, emissive: palette.glow,
-          emissiveIntensity: 1.0, roughness: 0.2, metalness: 0.4,
-          transparent: true, opacity: 0.95
-        })
+    // glowing crystals embedded in the rock
+    const crystalCount = randInt(0, 2);
+    for (let i = 0; i < crystalCount; i++) {
+      const cg = new THREE.Mesh(
+        new THREE.OctahedronGeometry(rand(0.3, 0.6)),
+        new THREE.MeshBasicMaterial({ color: 0x88ffd6, transparent: true, opacity: 0.85 })
       );
-      fc.position.set(rand(-radius, radius) * 0.7, radius + rand(2, 6), rand(-radius, radius) * 0.7);
-      fc.userData.float = { y0: fc.position.y, t: rand(0, 6) };
-      grp.add(fc);
+      const a = rand(0, Math.PI * 2);
+      const b = rand(-0.4, 0.4);
+      cg.position.set(Math.cos(a) * Math.cos(b) * r * 0.95, Math.sin(b) * r * 0.95, Math.sin(a) * Math.cos(b) * r * 0.95);
+      grp.add(cg);
     }
 
-    grp.userData.bobT = rand(0, Math.PI * 2);
-    grp.userData.bobAmp = rand(0.4, 1.2);
-    parent.add(grp);
-  }
-
-  _spawnRing(parent, x, y, z) {
-    const radius = 7;
-    const grp = new THREE.Group();
-    grp.position.set(x, y, z);
-    grp.rotation.y = rand(-0.3, 0.3);
-    grp.rotation.x = rand(-0.15, 0.15);
-
-    const geo = new THREE.TorusGeometry(radius, 0.55, 16, 72);
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0x7df9ff,
-      emissive: 0x7df9ff, emissiveIntensity: 0.9,
-      roughness: 0.25, metalness: 0.5,
-      transparent: true, opacity: 0.95
-    });
-    const ring = new THREE.Mesh(geo, mat);
-    grp.add(ring);
-
-    const halo = new THREE.Mesh(
-      new THREE.TorusGeometry(radius + 0.4, 1.6, 14, 72),
-      new THREE.MeshBasicMaterial({
-        color: 0x7df9ff, transparent: true, opacity: 0.2,
-        blending: THREE.AdditiveBlending, depthWrite: false
-      })
-    );
-    grp.add(halo);
-
-    const inner = new THREE.Mesh(
-      new THREE.CircleGeometry(radius - 0.7, 32),
-      new THREE.MeshBasicMaterial({
-        color: 0xb388ff, transparent: true, opacity: 0.10,
-        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
-      })
-    );
-    grp.add(inner);
-
-    grp.userData.kind = 'ring';
-    grp.userData.radius = radius;
+    grp.userData.kind = 'asteroid';
+    grp.userData.radius = r * 1.05;
     grp.userData.alive = true;
+    grp.userData.hp = Math.ceil(r * 1.4);   // bigger = more hp
+    grp.userData.maxHp = grp.userData.hp;
+    grp.userData.spin = new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1));
+    grp.userData.salvageReward = Math.ceil(r * 5);
+    grp.userData.scoreReward = Math.ceil(r * 30);
     parent.add(grp);
-    parent.userData.rings.push(grp);
+    parent.userData.hazards.push(grp);
   }
 
-  _spawnCrystal(parent, x, y, z) {
+  _spawnSalvage(parent, x, y, z) {
     const grp = new THREE.Group();
     grp.position.set(x, y, z);
-    const geo = new THREE.OctahedronGeometry(1.2, 0);
+    const geo = new THREE.OctahedronGeometry(0.9, 0);
     const mat = new THREE.MeshStandardMaterial({
-      color: 0xff6ec7,
-      emissive: 0xff6ec7, emissiveIntensity: 0.85,
-      roughness: 0.15, metalness: 0.7,
+      color: 0x88ffd6, emissive: 0x88ffd6, emissiveIntensity: 1.0,
+      roughness: 0.15, metalness: 0.8,
       transparent: true, opacity: 0.95
     });
     const c = new THREE.Mesh(geo, mat);
-    c.scale.y = 1.6;
+    c.scale.set(1, 1.6, 1);
     grp.add(c);
     const halo = new THREE.Mesh(
-      new THREE.SphereGeometry(2.4, 12, 8),
+      new THREE.SphereGeometry(1.8, 12, 8),
       new THREE.MeshBasicMaterial({
-        color: 0xff6ec7, transparent: true, opacity: 0.22,
+        color: 0x88ffd6, transparent: true, opacity: 0.25,
         blending: THREE.AdditiveBlending, depthWrite: false
       })
     );
     grp.add(halo);
     grp.userData.kind = 'crystal';
-    grp.userData.radius = 1.6;
+    grp.userData.radius = 1.4;
     grp.userData.alive = true;
     grp.userData.spinT = rand(0, Math.PI * 2);
     parent.add(grp);
     parent.userData.crystals.push(grp);
-  }
-
-  _spawnStorm(parent, x, y, z) {
-    const grp = new THREE.Group();
-    grp.position.set(x, y, z);
-    const radius = rand(8, 14);
-    const baseMat = new THREE.MeshStandardMaterial({
-      color: 0x441a3a, emissive: 0xff3b6b, emissiveIntensity: 0.55,
-      roughness: 0.95, transparent: true, opacity: 0.92
-    });
-    for (let i = 0; i < 5; i++) {
-      const r = radius * rand(0.5, 1.0);
-      const m = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), baseMat);
-      m.position.set(rand(-radius, radius) * 0.4, rand(-radius, radius) * 0.3, rand(-radius, radius) * 0.4);
-      grp.add(m);
-    }
-    grp.userData.kind = 'storm';
-    grp.userData.radius = radius;
-    grp.userData.alive = true;
-    parent.add(grp);
-    parent.userData.hazards.push(grp);
   }
 
   _spawnPower(parent, x, y, z, kind) {
@@ -561,14 +453,13 @@ export class World {
 
     const colors = {
       shield: 0x7df9ff,
-      slowmo: 0xb388ff,
+      energy: 0xb388ff,
       mega:   0xffd86b
     };
     const color = colors[kind];
 
-    // glowing core orb
     const core = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(1.5, 1),
+      new THREE.IcosahedronGeometry(1.4, 1),
       new THREE.MeshStandardMaterial({
         color, emissive: color, emissiveIntensity: 1.0,
         roughness: 0.18, metalness: 0.6,
@@ -577,18 +468,16 @@ export class World {
     );
     grp.add(core);
 
-    // outer wireframe shell
     const shell = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(2.2, 1),
+      new THREE.IcosahedronGeometry(2.1, 1),
       new THREE.MeshBasicMaterial({
         color, transparent: true, opacity: 0.55, wireframe: true
       })
     );
     grp.add(shell);
 
-    // halo
     const halo = new THREE.Mesh(
-      new THREE.SphereGeometry(3.0, 16, 12),
+      new THREE.SphereGeometry(2.8, 16, 12),
       new THREE.MeshBasicMaterial({
         color, transparent: true, opacity: 0.18,
         blending: THREE.AdditiveBlending, depthWrite: false
@@ -598,7 +487,7 @@ export class World {
 
     grp.userData.kind = 'power';
     grp.userData.power = kind;
-    grp.userData.radius = 2.6;
+    grp.userData.radius = 2.4;
     grp.userData.alive = true;
     grp.userData.spinT = rand(0, Math.PI * 2);
     grp.userData.shell = shell;
@@ -607,114 +496,78 @@ export class World {
     parent.userData.crystals.push(grp);
   }
 
-  _spawnGate(parent, x, y, z) {
+  _spawnDerelict(parent, x, y, z) {
+    // a long abandoned cruiser hull — pure decoration but cool
     const grp = new THREE.Group();
     grp.position.set(x, y, z);
+    grp.rotation.set(rand(-0.3, 0.3), rand(0, Math.PI * 2), rand(-0.3, 0.3));
 
-    // two vertical pillars + top arch
-    const pillarGeo = new THREE.CylinderGeometry(0.4, 0.6, 14, 14);
-    const pillarMat = new THREE.MeshStandardMaterial({
-      color: 0xffd86b, emissive: 0xffd86b, emissiveIntensity: 0.8,
-      roughness: 0.3, metalness: 0.6
-    });
-    const pl = new THREE.Mesh(pillarGeo, pillarMat);
-    pl.position.set(-7, 0, 0);
-    grp.add(pl);
-    const pr = pl.clone();
-    pr.position.x = 7;
-    grp.add(pr);
-
-    // crossbar
-    const bar = new THREE.Mesh(
-      new THREE.BoxGeometry(15, 0.6, 0.6),
-      pillarMat
-    );
-    bar.position.y = 7;
-    grp.add(bar);
-
-    // light plane filling the gate
-    const plane = new THREE.Mesh(
-      new THREE.PlaneGeometry(14, 14),
-      new THREE.MeshBasicMaterial({
-        color: 0xffd86b, transparent: true, opacity: 0.18,
-        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+    const hull = new THREE.Mesh(
+      new THREE.CylinderGeometry(2.4, 1.4, 24, 12),
+      new THREE.MeshStandardMaterial({
+        color: 0x3a3a4e, roughness: 0.9, metalness: 0.4,
+        emissive: 0x110015, emissiveIntensity: 0.3
       })
     );
-    plane.position.y = 0;
-    grp.add(plane);
+    hull.rotation.z = Math.PI / 2;
+    grp.add(hull);
 
-    grp.userData.kind = 'gate';
-    grp.userData.radius = 7;
-    grp.userData.halfHeight = 7;
-    grp.userData.alive = true;
-    parent.add(grp);
-    parent.userData.rings.push(grp); // gates use ring collision logic
-  }
+    // tail flare
+    const tail = new THREE.Mesh(
+      new THREE.ConeGeometry(2.4, 6, 12),
+      hull.material
+    );
+    tail.rotation.z = -Math.PI / 2;
+    tail.position.x = -15;
+    grp.add(tail);
 
-  _spawnRock(parent, x, y, z) {
-    const grp = new THREE.Group();
-    grp.position.set(x, y, z);
-    const r = rand(3, 6);
-    const geo = new THREE.IcosahedronGeometry(r, 1);
-    const pos = geo.attributes.position;
-    const v = new THREE.Vector3();
-    for (let i = 0; i < pos.count; i++) {
-      v.fromBufferAttribute(pos, i);
-      v.multiplyScalar(1 + Math.random() * 0.18);
-      pos.setXYZ(i, v.x, v.y, v.z);
+    // wings
+    for (const s of [-1, 1]) {
+      const w = new THREE.Mesh(
+        new THREE.BoxGeometry(8, 0.5, 4),
+        hull.material
+      );
+      w.position.set(0, 0, s * 3.5);
+      grp.add(w);
     }
-    geo.computeVertexNormals();
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0x49405a, roughness: 0.85, metalness: 0.2,
-      emissive: 0xff6ec7, emissiveIntensity: 0.05
-    });
-    const m = new THREE.Mesh(geo, mat);
-    grp.add(m);
-    grp.userData.kind = 'rock';
-    grp.userData.radius = r;
-    grp.userData.alive = true;
-    grp.userData.spin = new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1));
+
+    // flickering emergency lights
+    const light = new THREE.Mesh(
+      new THREE.SphereGeometry(0.4, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xff3b6b })
+    );
+    light.position.set(8, 1, 0);
+    grp.add(light);
+    grp.userData.flickerLight = light;
+
+    grp.userData.kind = 'derelict';
+    grp.userData.radius = 14;
+    grp.userData.spinT = rand(0, Math.PI * 2);
     parent.add(grp);
-    parent.userData.hazards.push(grp);
   }
 
-  // -----------------------------------------------------------
-  // UPDATE
   // -----------------------------------------------------------
   update(dt, time, playerZ) {
     this.travelled = -playerZ;
     if (this.sky.material.uniforms) this.sky.material.uniforms.time.value = time;
-    if (this.ocean.material.uniforms) this.ocean.material.uniforms.time.value = time;
+    if (this.nebulaA && this.nebulaA.material.uniforms) this.nebulaA.material.uniforms.time.value = time;
 
-    this.stars.rotation.y += dt * 0.005;
+    // star layer parallax
+    for (const layer of this.starLayers) {
+      layer.pts.position.z = playerZ * (1 - layer.parallax);
+      layer.pts.rotation.y += dt * 0.002 * layer.parallax;
+    }
 
-    // god-rays: gentle pulsing + parallax follow
-    if (this.godRays) {
-      this.godRays.position.z = playerZ - 200;
-      for (const r of this.godRays.children) {
-        r.userData.phase += dt * 0.5;
-        r.material.opacity = r.userData.baseOpacity * (0.7 + Math.sin(r.userData.phase) * 0.3);
+    // distant planets follow camera (parallax)
+    if (this.planets) {
+      this.planets.position.z = playerZ - 100;
+      for (const p of this.planets.children) {
+        if (p.userData.spinSpeed) p.rotation.y += dt * p.userData.spinSpeed;
       }
     }
 
-    // clouds parallax
-    for (const layer of this.cloudLayers) {
-      layer.grp.position.z = playerZ * (1 - layer.parallax);
-      layer.grp.rotation.y += dt * 0.005 * layer.parallax;
-    }
-
+    // chunks
     for (const chunk of this.chunks) {
-      for (const c of chunk.children) {
-        if (c.userData?.bobT !== undefined) {
-          c.userData.bobT += dt;
-          c.position.y += Math.sin(c.userData.bobT * 0.6) * dt * 0.3 * c.userData.bobAmp;
-          c.rotation.y += dt * 0.03;
-        }
-      }
-      for (const r of chunk.userData.rings) {
-        if (!r.userData.alive) continue;
-        r.rotation.z += dt * 0.6;
-      }
       for (const cr of chunk.userData.crystals) {
         if (!cr.userData.alive) continue;
         cr.userData.spinT += dt;
@@ -729,19 +582,24 @@ export class World {
         }
       }
       for (const h of chunk.userData.hazards) {
-        if (h.userData.kind === 'rock' && h.userData.spin) {
+        if (h.userData.kind === 'asteroid' && h.userData.spin) {
           h.rotation.x += h.userData.spin.x * dt * 0.4;
           h.rotation.y += h.userData.spin.y * dt * 0.4;
           h.rotation.z += h.userData.spin.z * dt * 0.4;
-        } else if (h.userData.kind === 'storm') {
-          h.rotation.y += dt * 0.2;
+        }
+      }
+      // derelict flicker
+      for (const c of chunk.children) {
+        if (c.userData?.flickerLight) {
+          c.userData.spinT = (c.userData.spinT || 0) + dt;
+          const v = (Math.sin(c.userData.spinT * 5.0) + Math.sin(c.userData.spinT * 11.3)) * 0.5 + 0.5;
+          c.userData.flickerLight.material.opacity = 0.4 + v * 0.6;
         }
       }
     }
 
     this.sky.position.set(0, 0, playerZ);
-    this.ocean.position.z = playerZ;
-    this.stars.position.z = playerZ;
+    this.nebulaA.position.set(0, 0, playerZ);
 
     while (this.chunks.length && this.chunks[0].position.z > playerZ + this.chunkLength * this.behindChunks) {
       const old = this.chunks.shift();
@@ -763,19 +621,14 @@ export class World {
     });
   }
 
-  gatherNear(playerZ, range = 200) {
-    const rings = [], crystals = [], hazards = [];
+  gatherNear(playerZ, range = 240) {
+    const crystals = [], hazards = [];
     for (const chunk of this.chunks) {
       const dz = Math.abs(chunk.position.z - playerZ);
       if (dz > range + this.chunkLength) continue;
-      for (const r of chunk.userData.rings)    if (r.userData.alive) rings.push({ obj: r, parent: chunk });
       for (const c of chunk.userData.crystals) if (c.userData.alive) crystals.push({ obj: c, parent: chunk });
       for (const h of chunk.userData.hazards)  if (h.userData.alive) hazards.push({ obj: h, parent: chunk });
     }
-    return { rings, crystals, hazards };
-  }
-
-  worldPos(item) {
-    return new THREE.Vector3().addVectors(item.parent.position, item.obj.position);
+    return { crystals, hazards, rings: [] };
   }
 }

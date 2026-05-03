@@ -1,93 +1,88 @@
-# 🌌 SKYRIFT — Hand-Controlled Sky Voyage
+# STARFORGE — Hand-Controlled Space Combat (Survivor)
 
-> 手のひらが操縦桿になる、止まらない空の旅。  
-> A revolutionary 3D infinite flight action game controlled by your hand via webcam (MediaPipe), or by touch on mobile.
+> 旧 SKYRIFT を全面リニューアルした、宇宙戦闘＋恒久強化型ローグライト。
+> Mediapipe で **手の動き・形** をトラッキングし、戦闘機を操縦＆発射する WebGL ゲームです。
 
-[**▶ Play in browser**](https://guttyanneruuuuuu.github.io/m-mg/) (after Pages is enabled)
+🎮 **Play it:** https://guttyanneruuuuuu.github.io/m-mg/
 
----
+## ✨ 特徴
 
-## ✨ Features
+- **舞台は深宇宙** — 星雲、星屑、惑星、デレリクト艦が漂う戦場。
+- **敵宇宙船との戦闘** — Scout / Fighter / Gunship / Bomber + 各ステージ末のボス。
+- **Mediapipe ベースのハンド操作** — 手の傾き・形でロール／ピッチ／ヨーを操縦。
+- **発射ジェスチャーをカスタマイズ** — 🤏 ピンチ / ☝️ ポイント / 👍 サムズアップ / ✊ 拳。
+- **タッチ／キーボードでも遊べる** — Fire / Boost / Brake / Missile ボタン。
+- **DaDa-Survivor 方式の進行** — 負けても回収した💎は永久に残り、`格納庫` で機体強化。
+- **約100ステージで世界制覇** — 強化が進むほど勝てるようになる成長バランス。
 
-- **🖐️ Hand-Tracking Flight (MediaPipe Hands)**
-  - Tilt your palm → roll & bank
-  - Move your hand up/down/left/right → pitch & yaw
-  - **Close your fist → BOOST**
-  - **Open your hand wide → BRAKE**
-  - Auto-calibration centers your "neutral pose" on first frames
-  - One-Euro filter smooths every input — buttery, no jitter
-- **📱 Touch Mode (mobile)**
-  - Floating relative joystick (snaps to where you touch)
-  - Big BOOST / BRAKE buttons sized for thumbs
-  - Designed for comfortable one-thumb-or-two play
-- **⌨️ Keyboard fallback** (WASD / arrows / space-boost / C-brake) — also accepts mouse aim
-- **🌅 Cinematic 3D world**
-  - Custom sky shader (gradient + sun disk)
-  - Sea-of-clouds plane with animated wave shader
-  - Smooth, **rounded** floating islands (NOT cubic — a Genshin-like vibe)
-  - Procedural infinite chunks: rings, crystals, asteroids, storm clouds
-  - HDR bloom + ACES tonemapping + post-processing
-- **🎵 Procedural audio engine** — no audio files, instant load. WebAudio synths handle music, pickups, hits, boost.
-- **♾️ Endless** — there is no level, no clearing, no end. Just fly further.
-- **🪙 Score / Combo / Best distance** persisted in localStorage.
+## 🛠 強化項目（HANGAR）
+
+| Icon | 名前 | 効果 |
+|------|------|------|
+| 🛡 | シールド容量 | 最大 HP +1 / Lv |
+| 💥 | プラズマ威力 | ダメージ +60% / Lv |
+| ⚡ | 連射速度 | 発射レート +18% / Lv |
+| 🎯 | マルチショット | 同時発射弾数 +1 / Lv |
+| ➡️ | 貫通 | 弾の貫通回数 +1 / Lv |
+| 🚀 | エンジン出力 | 機動速度 +6% / Lv |
+| 🚀 | 誘導ミサイル | 装弾数 + AOE威力 |
+| 💎 | 回収率 | サルベージ +20% / Lv |
+| ♻️ | シールド再生 | 自動回復が早く＆遅延短縮 |
 
 ## 🎮 Controls
 
-| Action | Hand | Touch | Keyboard |
-|---|---|---|---|
-| Roll / Bank | Tilt palm L/R | Joystick L/R | A / D or ←/→ |
-| Pitch (up/down) | Move palm up/down | Joystick up/down | W / S or ↑/↓ |
-| Yaw | Move palm L/R | (auto via roll) | Q / E |
-| Boost | Close fist ✊ | BOOST button | Space / Shift |
-| Brake | Open hand wide 🖐️ | BRAKE button | C / Ctrl |
-| Pause | — | ⏸ button | Esc |
+### Hand mode (Mediapipe)
+- 手のひらを傾ける → ロール／ピッチ／ヨー
+- ✊ 拳 → BOOST
+- 🖐️ 開く → BRAKE
+- 🤏 ピンチ → 主砲発射 (設定で変更可)
 
-**Pro tip:** Boost + hard-roll = 🌀 **Barrel Roll** (looks awesome).
+### Keyboard
+- WASD / Arrow → roll & pitch
+- Q / E → yaw
+- Space / Shift → BOOST
+- C / Ctrl → BRAKE
+- J / Z / Enter / Left-click → FIRE
+- M / X / Right-click → MISSILE
+
+### Touch (mobile)
+- 左ジョイスティック → 操縦
+- 右下 BOOST / BRAKE
+- 🔫 FIRE / 🚀 MISSILE ボタン
 
 ## 🚀 Run locally
 
-No build step. Just serve the folder over HTTP (camera/getUserMedia requires HTTPS or localhost).
-
 ```bash
-# Python
 python3 -m http.server 8000
-# or Node
-npx serve .
+# open http://localhost:8000
 ```
 
-Then open http://localhost:8000.
-
-## 🧱 Project structure
+## 📁 Project structure
 
 ```
-.
-├── index.html          # main entry, loads ES modules
-├── css/style.css       # full UI + HUD styling (glassmorphism / neon)
-├── js/
-│   ├── main.js         # boot, game loop, scene wiring
-│   ├── world.js        # procedural sky/islands/pickups/hazards
-│   ├── player.js       # ship mesh, flight model, trails
-│   ├── input.js        # unified controls (kbd / touch / hand)
-│   ├── hand.js         # MediaPipe Hands + smoothing + drawing
-│   ├── effects.js      # particle bursts (rings, hits, pickups)
-│   ├── audio.js        # WebAudio procedural music + SFX
-│   └── utils.js        # math, smoothing, OneEuro filter, storage
-└── assets/             # (currently empty — everything is procedural)
+m-mg/
+├── index.html
+├── css/style.css
+└── js/
+    ├── main.js          ゲームループ + UI / 進行管理
+    ├── world.js         宇宙背景・隕石・カプセル
+    ├── player.js        プレイヤー戦闘機
+    ├── enemies.js       敵宇宙船 + ボス + 弾道
+    ├── upgrades.js      恒久強化システム (HANGAR)
+    ├── input.js         統合入力 (キーボード/マウス/タッチ/ハンド)
+    ├── hand.js          Mediapipe Hands 統合
+    ├── effects.js       爆発・衝撃波・ヒット
+    ├── audio.js         WebAudio 効果音 + シンセ BGM
+    ├── postfx.js        色収差・ヴィネット・グレイン
+    └── utils.js         math / OneEuro / Storage
 ```
 
-## 🛠️ Tech
+## 🧰 Tech stack
 
-- [Three.js r160](https://threejs.org/) + EffectComposer (UnrealBloom)
-- [@mediapipe/tasks-vision 0.10.x](https://github.com/google-ai-edge/mediapipe) (HandLandmarker, GPU)
-- WebAudio API (procedural)
-- Pure ES Modules + import maps. No bundler. No build.
+- **Three.js 0.160** — WebGL レンダリング
+- **@mediapipe/tasks-vision** — 手のランドマーク検出
+- **WebAudio API** — 全 SFX/BGM 手続き合成
 
-## 📐 Performance
+## 📜 License
 
-- Adaptive pixel ratio + bloom strength based on Quality setting (省エネ / Standard / Cinematic)
-- Procedural chunked world with recycle behind player
-- Default ~6 chunks ahead (≈1.3 km of generated world at any time)
-
-## 🪪 License
-
-MIT. Made for fun.
+MIT

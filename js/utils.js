@@ -14,7 +14,6 @@ export const randInt = (a, b) => Math.floor(rand(a, b + 1));
 export const choose = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 // One-Euro filter — produces buttery-smooth tracking signals.
-// Used to smooth raw mediapipe landmark positions.
 export class OneEuro {
   constructor(minCutoff = 1.0, beta = 0.0, dCutoff = 1.0) {
     this.minCutoff = minCutoff;
@@ -51,7 +50,6 @@ export class Smoother {
   get() { return this.v; }
 }
 
-// micro signal/event bus
 export class Signal {
   constructor(){ this.subs = new Set(); }
   on(fn){ this.subs.add(fn); return () => this.subs.delete(fn); }
@@ -65,8 +63,8 @@ export const isMobile = () =>
 export const supportsTouch = () =>
   ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
-// Persisted settings/state
-const KEY = 'skyrift::v1';
+// Persisted state — extended for upgrades / stage / currency
+const KEY = 'starforge::v1';
 export const Storage = {
   load() {
     try { return JSON.parse(localStorage.getItem(KEY) || '{}'); }

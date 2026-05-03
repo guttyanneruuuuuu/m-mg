@@ -1,10 +1,7 @@
 // ===========================================================
-// hand.js — MediaPipe Hands integration with smoothing.   (v2)
-//   - Uses @mediapipe/tasks-vision (HandLandmarker, GPU)
-//   - Robust calibration (recenters anytime hand is held still)
-//   - Confidence-weighted smoothing (jitter-free)
-//   - Detection guide (red/yellow/green frame & overlay tip)
-//   - Outputs continuous control state to InputManager
+// hand.js — STARFORGE: MediaPipe Hands tracking
+//   - Continues to provide roll/pitch/yaw + fistness/openness
+//   - Adds: pinchDist, pointing, thumbsUp for fire-gesture detection
 // ===========================================================
 
 import { OneEuro, clamp, lerp } from './utils.js';
@@ -25,17 +22,17 @@ export class HandTracker {
     this.stream = null;
     this.failed = false;
 
-    // smoothing per axis — One-Euro filters tuned for buttery feel
     this.fRoll  = new OneEuro(1.4, 0.018, 1.0);
     this.fPitch = new OneEuro(1.4, 0.018, 1.0);
     this.fYaw   = new OneEuro(1.4, 0.018, 1.0);
     this.fFist  = new OneEuro(0.9, 0.006, 1.0);
     this.fOpen  = new OneEuro(0.9, 0.006, 1.0);
+    this.fPinch = new OneEuro(1.0, 0.008, 1.0);
+    this.fPoint = new OneEuro(0.9, 0.006, 1.0);
+    this.fThumb = new OneEuro(0.9, 0.006, 1.0);
 
-    // calibration: locked after stable frames, but can be re-locked any time
     this.calib = { rollOffset: 0, pitchOffset: 0, yawOffset: 0, locked: false, samples: 0, stillFrames: 0, lastRaw: null };
 
-    // visibility + confidence
     this.confidence = 0;
   }
 
@@ -55,7 +52,6 @@ export class HandTracker {
     this.preview.classList.remove('hidden');
     this.setStatus('カメラ起動中…', 'calibrating');
 
-    // 1) load mediapipe
     try {
       const vision = await import(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${TASKS_VISION_VERSION}`);
       const filesetResolver = await vision.FilesetResolver.forVisionTasks(
@@ -80,7 +76,6 @@ export class HandTracker {
       throw err;
     }
 
-    // 2) request camera — prefer good resolution but cap for perf
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
@@ -148,20 +143,23 @@ export class HandTracker {
       return;
     }
 
-    const lm = res.landmarks[0]; // 21 normalized [0,1]
-    // landmarks of interest
+    const lm = res.landmarks[0];
     const wrist  = lm[0];
     const thumbT = lm[4];
+    const thumbIP = lm[3];
     const indexT = lm[8];
-    const midT   = lm[12];
-    const ringT  = lm[16];
-    const pinkyT = lm[20];
     const indexB = lm[5];
+    const indexPIP = lm[6];
+    const midT   = lm[12];
     const midB   = lm[9];
+    const midPIP = lm[10];
+    const ringT  = lm[16];
     const ringB  = lm[13];
+    const ringPIP = lm[14];
+    const pinkyT = lm[20];
     const pinkyB = lm[17];
+    const pinkyPIP = lm[18];
 
-    // ==== validate hand is well within frame ====
     const cx = (indexB.x + pinkyB.x + wrist.x) / 3;
     const cy = (indexB.y + pinkyB.y + wrist.y) / 3;
     const inFrame = cx > 0.08 && cx < 0.92 && cy > 0.10 && cy < 0.92;
@@ -176,27 +174,43 @@ export class HandTracker {
 
     this.confidence = lerp(this.confidence, 1, 0.18);
 
-    // ==== ROLL: angle of indexBase -> pinkyBase ====
+    // ROLL
     const rollRaw = Math.atan2(pinkyB.y - indexB.y, pinkyB.x - indexB.x);
     let roll = rollRaw / (Math.PI * 0.5);
-
-    // ==== PITCH: y of palm center ====
     let pitch = (cy - 0.5) * 2.0;
-
-    // ==== YAW: x of palm center ====
     let yaw = (cx - 0.5) * 2.0;
 
-    // ==== FIST / OPENNESS ====
+    // Palm size for normalisation
     const palmSize = Math.hypot(indexB.x - pinkyB.x, indexB.y - pinkyB.y) + 1e-6;
+
+    // FIST / OPEN
     const tips = [indexT, midT, ringT, pinkyT];
     let dSum = 0;
     for (const t of tips) dSum += Math.hypot(t.x - cx, t.y - cy);
-    const meanDist = (dSum / tips.length) / palmSize; // ~0.6 closed, ~1.6 open
+    const meanDist = (dSum / tips.length) / palmSize;
     const fistness = clamp(1 - (meanDist - 0.55) / 0.7, 0, 1);
     const openness = clamp((meanDist - 0.95) / 0.65, 0, 1);
 
-    // ==== CALIBRATION ====
-    // detect "still" hand: low velocity for ~1 second -> capture origin
+    // PINCH (thumb tip to index tip)
+    const pinchDist = Math.hypot(thumbT.x - indexT.x, thumbT.y - indexT.y) / palmSize;
+
+    // POINTING (index extended, others curled)
+    const indexExt = Math.hypot(indexT.x - indexB.x, indexT.y - indexB.y) / palmSize;
+    const midExt   = Math.hypot(midT.x - midB.x,     midT.y - midB.y) / palmSize;
+    const ringExt  = Math.hypot(ringT.x - ringB.x,   ringT.y - ringB.y) / palmSize;
+    const pinkyExt = Math.hypot(pinkyT.x - pinkyB.x, pinkyT.y - pinkyB.y) / palmSize;
+    // pointing if index well-extended AND others curled
+    let pointing = 0;
+    if (indexExt > 1.05 && midExt < 0.75 && ringExt < 0.75 && pinkyExt < 0.75) pointing = 1;
+    pointing = clamp(pointing, 0, 1);
+
+    // THUMBS UP (thumb extended upward, fingers curled)
+    const thumbExt = Math.hypot(thumbT.x - wrist.x, thumbT.y - wrist.y) / palmSize;
+    const thumbUp = thumbT.y < indexB.y - 0.05;     // thumb tip above index base
+    let thumbsUp = 0;
+    if (thumbUp && thumbExt > 1.0 && indexExt < 0.75 && midExt < 0.75 && ringExt < 0.75 && pinkyExt < 0.75) thumbsUp = 1;
+
+    // CALIBRATION
     const raw = { r: roll, p: pitch, y: yaw };
     if (this.calib.lastRaw) {
       const d = Math.hypot(
@@ -210,14 +224,12 @@ export class HandTracker {
     this.calib.lastRaw = raw;
 
     if (!this.calib.locked) {
-      // initial soft calibration — pull origin toward current pose
       this.calib.rollOffset  = lerp(this.calib.rollOffset,  roll,  0.10);
       this.calib.pitchOffset = lerp(this.calib.pitchOffset, pitch, 0.10);
       this.calib.yawOffset   = lerp(this.calib.yawOffset,   yaw,   0.10);
       this.calib.samples++;
       if (this.calib.samples > 20 && this.calib.stillFrames > 12) this.calib.locked = true;
     } else if (this.calib.stillFrames > 90) {
-      // user has held the hand still for ~3 sec -> RE-LOCK origin (drift correction)
       this.calib.rollOffset  = lerp(this.calib.rollOffset,  roll,  0.04);
       this.calib.pitchOffset = lerp(this.calib.pitchOffset, pitch, 0.04);
       this.calib.yawOffset   = lerp(this.calib.yawOffset,   yaw,   0.04);
@@ -227,29 +239,35 @@ export class HandTracker {
     pitch -= this.calib.pitchOffset;
     yaw   -= this.calib.yawOffset;
 
-    // smooth (One-Euro)
     const tSec = time / 1000;
     roll  = this.fRoll.filter(roll, tSec);
     pitch = this.fPitch.filter(pitch, tSec);
     yaw   = this.fYaw.filter(yaw, tSec);
     const fistS = this.fFist.filter(fistness, tSec);
     const openS = this.fOpen.filter(openness, tSec);
+    const pinchS = this.fPinch.filter(pinchDist, tSec);
+    const pointS = this.fPoint.filter(pointing, tSec);
+    const thumbS = this.fThumb.filter(thumbsUp, tSec);
 
-    // dead-zone
     const dz = (v, z) => Math.abs(v) < z ? 0 : Math.sign(v) * (Math.abs(v) - z) / (1 - z);
     roll  = dz(roll, 0.07);
     pitch = dz(pitch, 0.09);
     yaw   = dz(yaw, 0.09);
 
-    // status line
-    let label = 'OK';
+    // status: reflect detected fire gesture
+    let label = '✓ TRACKING';
     if (!this.calib.locked) label = 'キャリブレ中… 手を真っ直ぐ';
-    else if (fistS > 0.7)  label = '✊ BOOST';
-    else if (openS > 0.6)  label = '🖐️ BRAKE';
-    else                   label = '✓ TRACKING';
+    else {
+      const fg = this.input.fireGesture;
+      if (fg === 'pinch'    && pinchS < 0.45)  label = '🤏 FIRE';
+      else if (fg === 'point'    && pointS > 0.6) label = '☝️ FIRE';
+      else if (fg === 'thumbsup' && thumbS > 0.6) label = '👍 FIRE';
+      else if (fg === 'fistHold' && fistS > 0.7) label = '✊ FIRE';
+      else if (fistS > 0.7)  label = '✊ BOOST';
+      else if (openS > 0.6)  label = '🖐️ BRAKE';
+    }
     this.setStatus(label, this.calib.locked ? 'ok' : 'calibrating');
 
-    // emit
     this.input.feedHand({
       present: true, time,
       roll: clamp(roll, -1.5, 1.5),
@@ -257,15 +275,22 @@ export class HandTracker {
       yaw: clamp(yaw, -1.5, 1.5),
       fistness: fistS,
       openness: openS,
+      pinchDist: pinchS,
+      pointing: pointS,
+      thumbsUp: thumbS,
       confidence: this.confidence
     });
 
-    // draw
-    const tone = fistS > 0.7
-      ? 'rgba(255,110,199,0.95)'
-      : openS > 0.6
-        ? 'rgba(125,249,255,0.95)'
-        : 'rgba(179,136,255,0.92)';
+    let tone = 'rgba(179,136,255,0.92)';
+    const fg = this.input.fireGesture;
+    const isFiring =
+      (fg === 'pinch' && pinchS < 0.45) ||
+      (fg === 'point' && pointS > 0.6) ||
+      (fg === 'thumbsup' && thumbS > 0.6) ||
+      (fg === 'fistHold' && fistS > 0.7);
+    if (isFiring) tone = 'rgba(255,180,90,0.95)';
+    else if (fistS > 0.7) tone = 'rgba(255,110,199,0.95)';
+    else if (openS > 0.6) tone = 'rgba(125,249,255,0.95)';
     this._drawSkeleton(lm, fistS, openS, tone);
     this._drawGuide(true);
   }
@@ -273,7 +298,6 @@ export class HandTracker {
   _drawGuide(ok, warn = false) {
     const w = this.canvas.width, h = this.canvas.height;
     const ctx = this.ctx;
-    // central guide ring fades out once locked
     const alpha = this.calib.locked ? 0.2 : 0.55;
     const stroke = warn ? '#ffb547' : ok ? '#7df9ff' : '#ff6ec7';
     ctx.save();
@@ -291,7 +315,7 @@ export class HandTracker {
   _drawSkeleton(lm, fist, open, color) {
     const w = this.canvas.width, h = this.canvas.height;
     const ctx = this.ctx;
-    const X = x => (1 - x) * w; // mirrored
+    const X = x => (1 - x) * w;
     const Y = y => y * h;
 
     const conns = [
@@ -322,7 +346,6 @@ export class HandTracker {
       ctx.fill();
     }
 
-    // emphasize fingertips when fist/open active
     if (fist > 0.7 || open > 0.6) {
       const tipIdx = [4, 8, 12, 16, 20];
       ctx.fillStyle = fist > 0.7 ? '#ff6ec7' : '#7df9ff';
