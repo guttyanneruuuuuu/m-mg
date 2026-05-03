@@ -1,21 +1,25 @@
 // ===========================================================
-// input.js — STARFORGE unified input system
-//   - Adds FIRE button + hand-gesture fire detection
-//   - Configurable fire gesture (pinch / point / fist hold)
-//   - Keyboard fire = J or Z or Enter or Mouse Left Click
-//   - Touch FIRE button on right side
-//   - Outputs: roll/pitch/yaw/boost/brake + fire (0/1) + missile (one-shot)
+// input.js — STARFORGE unified input system (v2)
+//   - Easier hand control:
+//     * Wider dead zones, gentler input curves, adaptive sensitivity
+//     * Auto-fire toggle (hand: pinch can latch fire on/off)
+//     * Steady fire while ANY of 3 detection modes triggers (combined)
+//     * Calibration shortcut on simple gesture (open palm 1 sec)
+//   - More reliable gesture detection w/ hysteresis (debouncing)
+//   - Returns aimAssist info forwarded to bullets
 // ===========================================================
 
 import { clamp, damp, lerp, OneEuro, isMobile, supportsTouch, Storage } from './utils.js';
 
-const curve = (x, k = 1.6) => Math.sign(x) * Math.pow(Math.abs(x), k);
+// gentler curve so small hand tilts move the ship clearly
+const curve = (x, k = 1.4) => Math.sign(x) * Math.pow(Math.abs(x), k);
 
 export const FIRE_GESTURES = {
-  pinch:    { label: 'ピンチ (親指×人差指)', desc: '親指と人差指をくっつけて発射' },
-  point:    { label: '人差指を立てる',      desc: '人差指だけ伸ばしたら自動連射' },
-  thumbsup: { label: 'サムズアップ',        desc: '親指を立てると発射' },
-  fistHold: { label: '拳を握る',           desc: '拳を握って発射 (ブーストはOFF)' }
+  pinch:    { label: '🤏 ピンチ',    desc: '親指と人差指をくっつけて発射' },
+  point:    { label: '☝️ ポイント',  desc: '人差指を伸ばすと自動連射' },
+  thumbsup: { label: '👍 サムズアップ', desc: '親指を立てて発射' },
+  fistHold: { label: '✊ 拳',         desc: '拳を握って発射 (ブースト無効)' },
+  auto:     { label: '🤖 オート',    desc: '敵を捕捉中は自動連射 (簡単モード)' }
 };
 
 export class InputManager {
@@ -30,16 +34,29 @@ export class InputManager {
     this.mirror    = true;
     this.invertY   = false;
     this.tiltAssist = false;
-    this.dampLambda = 11;
+    this.dampLambda = 12;
     this.lastBarrel = 0;
     this.barrelRoll = 0;
-    this.boostHoldStart = 0;
-    this.brakeHoldStart = 0;
 
     // fire state
     this.fireGesture = (Storage.load().fireGesture) || 'pinch';
-    this.fireDown = false;            // analog fire (continuous)
-    this.missilePulse = false;        // single-shot trigger
+    this.fireDown = false;
+    this.missilePulse = false;
+
+    // === EASE features ===
+    // simplified mode: applies extra dead zone & smoothing on hand input
+    this.simplifiedMode = Storage.load().simplifiedMode !== false;  // default ON
+    // auto-fire latch: a light tap can keep auto fire ON until tapped again
+    this.autoFireLatch = Storage.load().autoFireLatch || false;
+    this.autoFireOn = false;
+
+    // gesture hysteresis state to avoid flicker
+    this._fireOnState = false;
+    this._fireOnT = 0;     // last toggle timestamp
+
+    // calibration request via open palm hold
+    this.openPalmHoldT = 0;
+    this.calibrateRequested = false;
 
     // keyboard
     this.keys = new Set();
@@ -69,6 +86,10 @@ export class InputManager {
     this._lastHandSeen = 0;
     this._handFreshness = 0;
 
+    // target detection (for auto-fire and aim-assist hint)
+    this.hasTarget = false;
+    this.targetCenterness = 0;   // 0..1 (1 = aim is right on a target)
+
     if (supportsTouch() && isMobile()) this.mode = 'touch';
   }
 
@@ -78,6 +99,18 @@ export class InputManager {
       this.fireGesture = g;
       Storage.patch({ fireGesture: g });
     }
+  }
+  setSimplified(v) {
+    this.simplifiedMode = !!v;
+    Storage.patch({ simplifiedMode: this.simplifiedMode });
+  }
+  setAutoFireLatch(v) {
+    this.autoFireLatch = !!v;
+    Storage.patch({ autoFireLatch: this.autoFireLatch });
+  }
+  setTargetState(hasTarget, centerness) {
+    this.hasTarget = !!hasTarget;
+    this.targetCenterness = clamp(centerness || 0, 0, 1);
   }
 
   // ----------------- KEYBOARD -----------------
@@ -104,7 +137,6 @@ export class InputManager {
       if (e.button === 0) this._mouseDown = false;
     });
     window.addEventListener('contextmenu', e => {
-      // allow right-click missiles by suppressing menu when game is running
       if (this.mode === 'keyboard' || this.mode === 'hand') e.preventDefault();
     });
   }
@@ -121,7 +153,6 @@ export class InputManager {
     if (!zone) return;
 
     const MAX = 70;
-
     const setKnob = (dx, dy) => {
       knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
       const len = Math.hypot(dx, dy) / MAX;
@@ -219,7 +250,6 @@ export class InputManager {
     }
   }
 
-  // ----------------- DEVICE TILT -----------------
   _installTilt() {
     const handler = (e) => {
       if (e.gamma == null || e.beta == null) return;
@@ -240,7 +270,6 @@ export class InputManager {
     return true;
   }
 
-  // ----------------- HAND TRACKING (called from hand.js) -----------------
   feedHand(state) {
     this.hand = state;
     if (state && state.present) this._lastHandSeen = performance.now();
@@ -250,46 +279,103 @@ export class InputManager {
     return this.hand && (performance.now() - this._lastHandSeen) < 280;
   }
 
+  consumeCalibrate() {
+    const v = this.calibrateRequested;
+    this.calibrateRequested = false;
+    return v;
+  }
+
   // ----------------- UPDATE -----------------
   update(dt) {
     let r = 0, p = 0, y = 0, boost = 0, brake = 0, fire = 0;
-    let activeMode = this.mode;
 
     // ---------- HAND ----------
     if (this.mode === 'hand' && this.isHandFresh()) {
       const h = this.hand;
+      // adaptive sens: tighter when not centered (stops drift)
       const k = this.handSens;
       this._handFreshness = lerp(this._handFreshness, 1, 0.18);
 
-      r = clamp(curve(h.roll, 1.45)  * 1.5 * k, -1, 1);
-      p = clamp(curve(h.pitch, 1.4)  * 1.6 * k, -1, 1);
-      y = clamp(curve(h.yaw, 1.5)    * 1.3 * k, -1, 1);
+      // SIMPLIFIED dead-zones make centering easy
+      const dz = this.simplifiedMode ? 0.10 : 0.06;
+      const dzApply = (v) => Math.abs(v) < dz ? 0 : Math.sign(v) * (Math.abs(v) - dz) / (1 - dz);
+      let rRaw = dzApply(h.roll);
+      let pRaw = dzApply(h.pitch);
+      let yRaw = dzApply(h.yaw);
+
+      // gentler curve in simplified mode (k=1.2), stronger in expert (k=1.5)
+      const ck = this.simplifiedMode ? 1.20 : 1.45;
+
+      r = clamp(curve(rRaw, ck) * 1.5 * k, -1, 1);
+      p = clamp(curve(pRaw, ck) * 1.6 * k, -1, 1);
+      y = clamp(curve(yRaw, ck) * 1.3 * k, -1, 1);
       if (this.mirror) y = -y;
       if (this.invertY) p = -p;
 
-      // boost = fist (only if fistHold isn't the fire gesture)
       if (this.fireGesture !== 'fistHold') {
-        boost = clamp((h.fistness - 0.5) * 2.6, 0, 1);
+        boost = clamp((h.fistness - 0.55) * 2.5, 0, 1);
       }
-      // brake = open hand
       brake = clamp((h.openness - 0.78) * 3.2, 0, 1);
 
-      // fire detection per gesture
-      switch (this.fireGesture) {
-        case 'pinch':
-          // pinch = thumb tip near index tip
-          fire = clamp((0.55 - (h.pinchDist ?? 1)) * 6, 0, 1);
-          break;
-        case 'point':
-          // index extended, others curled
-          fire = clamp((h.pointing ?? 0), 0, 1);
-          break;
-        case 'thumbsup':
-          fire = clamp((h.thumbsUp ?? 0), 0, 1);
-          break;
-        case 'fistHold':
-          fire = clamp((h.fistness - 0.6) * 3, 0, 1);
-          break;
+      // ===== FIRE: combined detection w/ hysteresis =====
+      let fireRaw = 0;
+      const fg = this.fireGesture;
+      if (fg === 'auto') {
+        // auto: shoot when any reasonable gesture or centered target
+        const anyGesture =
+          (h.pinchDist != null && h.pinchDist < 0.55) ||
+          (h.pointing > 0.55) ||
+          (h.thumbsUp > 0.6);
+        // Or simply: target centered enough
+        if (anyGesture || this.targetCenterness > 0.55) fireRaw = 1;
+      } else if (fg === 'pinch') {
+        // smoother pinch: use hysteresis (open at >0.55, close at <0.45)
+        if (this._fireOnState) fireRaw = (h.pinchDist < 0.55) ? 1 : 0;
+        else fireRaw = (h.pinchDist < 0.42) ? 1 : 0;
+      } else if (fg === 'point') {
+        fireRaw = (this._fireOnState ? (h.pointing > 0.45 ? 1 : 0) : (h.pointing > 0.62 ? 1 : 0));
+      } else if (fg === 'thumbsup') {
+        fireRaw = (this._fireOnState ? (h.thumbsUp > 0.45 ? 1 : 0) : (h.thumbsUp > 0.6 ? 1 : 0));
+      } else if (fg === 'fistHold') {
+        fireRaw = (this._fireOnState ? (h.fistness > 0.55 ? 1 : 0) : (h.fistness > 0.7 ? 1 : 0));
+      }
+      // debounce — minimum 80ms hold to flip
+      const now = performance.now();
+      if (fireRaw !== (this._fireOnState ? 1 : 0)) {
+        if (now - this._fireOnT > 60) {
+          this._fireOnState = !!fireRaw;
+          this._fireOnT = now;
+        }
+      } else {
+        this._fireOnT = now;
+      }
+      fire = this._fireOnState ? 1 : 0;
+
+      // auto-fire latch — pinch tap toggles latched auto-fire
+      if (this.autoFireLatch && fg === 'pinch') {
+        if (this._lastFireOn !== this._fireOnState) {
+          if (this._fireOnState) {
+            this._latchToggleStart = now;
+          } else if (now - (this._latchToggleStart || 0) < 220) {
+            // short tap toggles latch
+            this.autoFireOn = !this.autoFireOn;
+          }
+        }
+        this._lastFireOn = this._fireOnState;
+        if (this.autoFireOn) fire = 1;
+      } else {
+        this.autoFireOn = false;
+      }
+
+      // ===== Open palm hold (>1s) -> calibrate request =====
+      if (h.openness > 0.85 && Math.abs(h.roll) < 0.20 && Math.abs(h.pitch) < 0.20) {
+        this.openPalmHoldT += dt;
+        if (this.openPalmHoldT > 1.0) {
+          this.calibrateRequested = true;
+          this.openPalmHoldT = -2.0;   // cooldown
+        }
+      } else {
+        this.openPalmHoldT = Math.max(0, this.openPalmHoldT - dt * 0.5);
       }
     } else if (this.mode === 'hand') {
       this._handFreshness = lerp(this._handFreshness, 0, 0.08);
@@ -322,8 +408,8 @@ export class InputManager {
     if (this.mode === 'touch') {
       const jx = this.joy.dx;
       const jy = this.joy.dy;
-      r = clamp(curve(jx, 1.4) * 1.15 * this.touchSens, -1, 1);
-      p = clamp(curve(jy, 1.4) * 1.15 * this.touchSens, -1, 1);
+      r = clamp(curve(jx, 1.3) * 1.15 * this.touchSens, -1, 1);
+      p = clamp(curve(jy, 1.3) * 1.15 * this.touchSens, -1, 1);
       boost = Math.max(boost, this.touchBoost);
       brake = Math.max(brake, this.touchBrake);
       fire  = Math.max(fire,  this.touchFire);
@@ -351,21 +437,22 @@ export class InputManager {
     this.target.brake = brake;
     this.target.fire  = fire;
 
+    // smoother damping when in simplified mode
+    const lambda = this.simplifiedMode ? this.dampLambda * 0.85 : this.dampLambda;
     const stickL = (cur, tgt, fastL, slowL) => {
       const same = Math.sign(cur) === Math.sign(tgt) || tgt === 0;
       return same ? fastL : slowL;
     };
-    this.value.roll  = damp(this.value.roll,  this.target.roll,  stickL(this.value.roll,  this.target.roll,  this.dampLambda, this.dampLambda * 0.55), dt);
-    this.value.pitch = damp(this.value.pitch, this.target.pitch, stickL(this.value.pitch, this.target.pitch, this.dampLambda, this.dampLambda * 0.55), dt);
-    this.value.yaw   = damp(this.value.yaw,   this.target.yaw,   this.dampLambda * 0.65, dt);
+    this.value.roll  = damp(this.value.roll,  this.target.roll,  stickL(this.value.roll,  this.target.roll,  lambda, lambda * 0.55), dt);
+    this.value.pitch = damp(this.value.pitch, this.target.pitch, stickL(this.value.pitch, this.target.pitch, lambda, lambda * 0.55), dt);
+    this.value.yaw   = damp(this.value.yaw,   this.target.yaw,   lambda * 0.65, dt);
     this.value.boost = damp(this.value.boost, this.target.boost, 18, dt);
     this.value.brake = damp(this.value.brake, this.target.brake, 18, dt);
     this.value.fire  = damp(this.value.fire,  this.target.fire,  22, dt);
 
-    // barrel-roll trigger (combo of boost + hard roll, kept from before)
-    const now = performance.now() / 1000;
-    if (this.target.boost > 0.85 && Math.abs(this.target.roll) > 0.75 && now - this.lastBarrel > 1.2) {
-      this.lastBarrel = now;
+    const now2 = performance.now() / 1000;
+    if (this.target.boost > 0.85 && Math.abs(this.target.roll) > 0.75 && now2 - this.lastBarrel > 1.2) {
+      this.lastBarrel = now2;
       this.barrelRoll = Math.sign(this.target.roll);
     }
   }

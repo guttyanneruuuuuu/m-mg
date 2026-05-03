@@ -595,10 +595,19 @@ export class ProjectileManager {
     halo.position.copy(spec.pos);
     this.scene.add(halo);
 
+    // crit-tinted bullets are bigger
+    if (spec.crit) {
+      m.scale.setScalar(1.6);
+      halo.scale.setScalar(1.5);
+      m.material.color.setHex(0xffd86b);
+      halo.material.color.setHex(0xffd86b);
+    }
     this.playerBullets.push({
       mesh: m, halo, dir: spec.dir.clone(), speed: spec.speed || 220,
       damage: spec.damage || 1, life: spec.life || 2.0,
-      pierce: spec.pierce || 0, hits: new Set()
+      pierce: spec.pierce || 0, hits: new Set(),
+      aimAssist: spec.aimAssist || 0,
+      crit: !!spec.crit
     });
   }
 
@@ -652,7 +661,8 @@ export class ProjectileManager {
     this.missiles.push({
       mesh: m, flame, dir: spec.dir.clone(), speed: spec.speed || 90,
       damage: spec.damage || 6, life: spec.life || 4.0,
-      target: null, homing: spec.homing
+      target: null, homing: spec.homing,
+      aoe: spec.aoe || 8
     });
   }
 
@@ -664,6 +674,32 @@ export class ProjectileManager {
     for (let i = this.playerBullets.length - 1; i >= 0; i--) {
       const b = this.playerBullets[i];
       b.life -= dt;
+
+      // ===== Aim assist: gently steer the bullet toward the closest enemy
+      // within a forward cone. Strength comes from upgrades / equipment.
+      if (b.aimAssist > 0) {
+        let best = null, bestScore = -1;
+        for (const e of enemies) {
+          if (b.hits.has(e)) continue;
+          const to = e.root.position.clone().sub(b.mesh.position);
+          const dist = to.length();
+          if (dist < 1 || dist > 80) continue;
+          to.normalize();
+          const dot = to.dot(b.dir);
+          if (dot < 0.85) continue; // only enemies within ~32° forward cone
+          const score = dot * (1 / (1 + dist * 0.04));
+          if (score > bestScore) { bestScore = score; best = { e, to, dist }; }
+        }
+        if (best) {
+          const t = clamp(b.aimAssist * 1.2, 0, 0.35);
+          b.dir.lerp(best.to, t).normalize();
+          // re-orient mesh
+          const q = new THREE.Quaternion();
+          q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), b.dir);
+          b.mesh.quaternion.copy(q);
+        }
+      }
+
       const step = b.dir.clone().multiplyScalar(b.speed * dt);
       b.mesh.position.add(step);
       b.halo.position.copy(b.mesh.position);
@@ -674,7 +710,7 @@ export class ProjectileManager {
         if (b.hits.has(e)) continue;
         const d = b.mesh.position.distanceTo(e.root.position);
         if (d < e.radius + 0.6) {
-          events.push({ kind: 'enemyHit', enemy: e, damage: b.damage, pos: b.mesh.position.clone() });
+          events.push({ kind: 'enemyHit', enemy: e, damage: b.damage, pos: b.mesh.position.clone(), crit: b.crit });
           b.hits.add(e);
           if (b.pierce > 0) { b.pierce--; }
           else { consumed = true; }
@@ -729,7 +765,7 @@ export class ProjectileManager {
         }
         if (best) {
           const desired = new THREE.Vector3().subVectors(best.root.position, m.mesh.position).normalize();
-          m.dir.lerp(desired, 0.06).normalize();
+          m.dir.lerp(desired, 0.08).normalize();
           const q = new THREE.Quaternion();
           q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), m.dir);
           m.mesh.quaternion.copy(q);
@@ -744,14 +780,15 @@ export class ProjectileManager {
 
       let consumed = false;
       // collide with enemies (AOE)
+      const aoe = m.aoe || 8;
       for (const e of enemies) {
         const d = m.mesh.position.distanceTo(e.root.position);
         if (d < e.radius + 1.0) {
           // splash: hit nearby enemies too
           for (const e2 of enemies) {
             const d2 = m.mesh.position.distanceTo(e2.root.position);
-            if (d2 < 8) {
-              const falloff = clamp(1 - d2 / 8, 0.3, 1);
+            if (d2 < aoe) {
+              const falloff = clamp(1 - d2 / aoe, 0.3, 1);
               events.push({ kind: 'enemyHit', enemy: e2, damage: m.damage * falloff, pos: m.mesh.position.clone() });
             }
           }

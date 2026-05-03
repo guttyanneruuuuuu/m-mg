@@ -11,7 +11,7 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;700&family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
 
 <link rel="stylesheet" href="css/style.css" />
 
@@ -55,6 +55,18 @@
       <span class="logo-glow">STAR</span><span class="logo-accent">FORGE</span>
     </h1>
     <p class="title-sub">手のひらが操縦桿、敵艦隊を撃ち墜とせ。100ステージで宇宙を制覇せよ。</p>
+
+    <div class="title-pilot">
+      <div class="title-pilot-avatar"><span id="titlePilotLvlIcon">★</span></div>
+      <div class="title-pilot-info">
+        <div class="title-pilot-row">
+          <span class="title-pilot-label">PILOT LV</span>
+          <span class="title-pilot-level" id="titlePilotLvl">1</span>
+        </div>
+        <div class="title-pilot-xp-bar"><div class="title-pilot-xp-fill" id="titlePilotXp"></div></div>
+        <div class="title-pilot-xp-text" id="titlePilotXpText">0 / 60 XP</div>
+      </div>
+    </div>
 
     <div class="title-stats">
       <div class="title-stat">
@@ -100,6 +112,8 @@
       <button class="ghost-btn" id="btnHowto">遊び方</button>
       <button class="ghost-btn" id="btnSettings">設定</button>
     </div>
+
+    <div class="title-mini-row" id="titleMiniMissions"></div>
   </div>
 </div>
 
@@ -115,9 +129,13 @@
     <div class="hand-intro-tips">
       <div class="tip"><span>📍</span>明るい場所で、手の全体がカメラに映る位置に</div>
       <div class="tip"><span>📏</span>顔から30〜50cm程度の距離が理想</div>
-      <div class="tip"><span>👋</span>最初の数秒は手を真っ直ぐ伸ばして自動キャリブ</div>
-      <div class="tip"><span>🤏</span>発射ジェスチャーは設定から変更可（既定: ピンチ）</div>
+      <div class="tip"><span>👋</span>手を <b>1秒開いたまま</b> にすると 自動キャリブ</div>
+      <div class="tip"><span>🤖</span>自信がない人は <b>オート発射</b> がおすすめ</div>
     </div>
+    <label class="hand-intro-toggle">
+      <input type="checkbox" id="setSimplifiedIntro" checked>
+      <span><b>かんたんモード</b>（広いデッドゾーン・滑らかな操作）</span>
+    </label>
     <button class="primary-btn" id="btnStartHand">カメラを許可してスタート</button>
     <button class="ghost-btn" id="btnHandCancel">タッチで遊ぶ</button>
   </div>
@@ -132,7 +150,7 @@
         <div class="howto-ico">🛬</div>
         <div>
           <b>傾ける = 旋回・上下</b><br>
-          手のひらを左右に傾けるとロール、上下に動かすとピッチ。
+          手のひらを左右に傾けるとロール、上下に動かすとピッチ。手を中央に保てば自動的に水平。
         </div>
       </div>
       <div class="howto-item">
@@ -145,15 +163,29 @@
       <div class="howto-item">
         <div class="howto-ico">🖐️</div>
         <div>
-          <b>開く = ブレーキ</b><br>
-          手を大きく開くと減速、精密狙いモードに。
+          <b>開く = ブレーキ＋自動キャリブ</b><br>
+          手を開くと減速。1秒間まっすぐ開くと自動キャリブ。
         </div>
       </div>
       <div class="howto-item">
         <div class="howto-ico">🤏</div>
         <div>
           <b>ピンチ = 発射</b><br>
-          親指×人差指で連射。設定で 👆/👍/✊ にも変更可。
+          親指×人差指で連射。ヒステリシスで誤爆を防止。設定で 👆/👍/✊/🤖 にも変更可。
+        </div>
+      </div>
+      <div class="howto-item">
+        <div class="howto-ico">🤖</div>
+        <div>
+          <b>オート発射</b><br>
+          中央付近に敵が来ると自動連射。手の細かい操作が苦手な人向け。
+        </div>
+      </div>
+      <div class="howto-item">
+        <div class="howto-ico">🎯</div>
+        <div>
+          <b>エイムアシスト</b><br>
+          強化やモジュールで弾が敵に少し吸い寄せられる。
         </div>
       </div>
       <div class="howto-item">
@@ -166,22 +198,22 @@
       <div class="howto-item">
         <div class="howto-ico">🛠</div>
         <div>
-          <b>格納庫で強化</b><br>
-          シールド・火力・連射・ミサイル等を恒久強化。
+          <b>格納庫で強化＆装備</b><br>
+          シールド・火力・装備・スキンを管理。ボスからレア装備がドロップ。
         </div>
       </div>
       <div class="howto-item">
         <div class="howto-ico">👹</div>
         <div>
           <b>ステージ末のボス</b><br>
-          各ステージ終端に強敵が出現。倒すと次ステージへ。
+          各ステージ終端に強敵が出現。倒すとレア装備＋次ステージへ。
         </div>
       </div>
       <div class="howto-item">
         <div class="howto-ico">🏆</div>
         <div>
           <b>100ステージで勝利</b><br>
-          約100周分で機体は十分強くなり、宇宙を制覇できる。
+          パイロットレベル・装備・スキンを揃えて宇宙を制覇。
         </div>
       </div>
     </div>
@@ -214,8 +246,13 @@
       <input type="checkbox" id="setMirror" checked>
     </label>
     <label class="setting-row">
+      <span>かんたんモード（操作補正）</span>
+      <input type="checkbox" id="setSimplified" checked>
+    </label>
+    <label class="setting-row">
       <span>発射ジェスチャー</span>
       <select id="setFireGesture">
+        <option value="auto">🤖 オート (自動連射)</option>
         <option value="pinch">🤏 ピンチ (親指×人差指)</option>
         <option value="point">☝️ 人差指を立てる</option>
         <option value="thumbsup">👍 サムズアップ</option>
@@ -234,20 +271,57 @@
   </div>
 </div>
 
-<!-- ============== HANGAR (UPGRADE SHOP) ============== -->
+<!-- ============== HANGAR (UPGRADE / EQUIP / SKIN / STATS) ============== -->
 <div id="hangarScreen" class="overlay hidden modal">
   <div class="modal-card hangar-card">
     <div class="hangar-header">
       <div>
         <div class="hangar-tag">⚙ HANGAR</div>
-        <h2>機体強化</h2>
+        <h2 id="hangarTitle">機体格納庫</h2>
       </div>
       <div class="hangar-stats">
         <div><span>💎 SALVAGE</span><b id="hangarSalvage">0</b></div>
+        <div><span>PILOT</span><b id="hangarPilot">LV 1</b></div>
         <div><span>BEST STAGE</span><b id="hangarStage">1</b></div>
       </div>
     </div>
-    <div class="hangar-list" id="hangarList"></div>
+
+    <div class="hangar-tabs">
+      <button class="hangar-tab active" data-tab="upgrade">🛠 強化</button>
+      <button class="hangar-tab" data-tab="loadout">🔧 装備</button>
+      <button class="hangar-tab" data-tab="skin">🎨 外装</button>
+      <button class="hangar-tab" data-tab="missions">📋 ミッション</button>
+      <button class="hangar-tab" data-tab="stats">📊 戦績</button>
+    </div>
+
+    <div class="hangar-tab-body">
+      <div class="hangar-pane" id="paneUpgrade">
+        <div class="hangar-cat-row" id="hangarCats"></div>
+        <div class="hangar-list" id="hangarList"></div>
+      </div>
+
+      <div class="hangar-pane hidden" id="paneLoadout">
+        <div class="loadout-slots" id="loadoutSlots"></div>
+        <div class="loadout-inv-head">所持装備 <span class="loadout-inv-hint">クリックで装備 / 長押し or ✕ で売却</span></div>
+        <div class="loadout-inv" id="loadoutInv"></div>
+      </div>
+
+      <div class="hangar-pane hidden" id="paneSkin">
+        <div class="skin-grid" id="skinGrid"></div>
+      </div>
+
+      <div class="hangar-pane hidden" id="paneMissions">
+        <div class="mission-head">本日のミッション</div>
+        <div class="mission-list" id="missionList"></div>
+        <div class="mission-head" style="margin-top:14px">実績</div>
+        <div class="achievement-list" id="achievementList"></div>
+      </div>
+
+      <div class="hangar-pane hidden" id="paneStats">
+        <div class="stats-grid" id="statsGrid"></div>
+      </div>
+    </div>
+
     <div class="hangar-footer">
       <button class="ghost-btn warn-btn" id="btnHangarReset">セーブをリセット</button>
       <button class="primary-btn" id="btnHangarClose">閉じる</button>
@@ -275,6 +349,15 @@
       <span class="pill-label">SPD</span>
       <span class="pill-value" id="hudSpeed">000</span>
     </div>
+    <div class="hud-pill pilot-pill">
+      <span class="pill-label">LV</span>
+      <span class="pill-value" id="hudPilot">1</span>
+    </div>
+  </div>
+
+  <!-- pilot xp bar (slim, under top) -->
+  <div class="hud-xp-wrap">
+    <div class="hud-xp-bar"><div class="hud-xp-fill" id="hudXp"></div></div>
   </div>
 
   <!-- wave / boss bar -->
@@ -286,6 +369,7 @@
   <div id="hudBossBar" class="hud-boss-bar hidden">
     <div class="hud-boss-label">⚠ BOSS</div>
     <div class="hud-boss-track"><div class="hud-boss-fill" id="hudBossFill"></div></div>
+    <div class="hud-boss-name" id="hudBossName">SECTOR LORD</div>
   </div>
 
   <!-- left: HP -->
@@ -299,13 +383,27 @@
       <span class="missile-icon">🚀</span>
       <span class="missile-count">0</span><span class="missile-max">/0</span>
     </div>
+
+    <!-- combo meter -->
+    <div id="hudCombo" class="combo-meter hidden">
+      <div class="combo-meter-num" id="hudComboNum">x2</div>
+      <div class="combo-meter-bar"><div class="combo-meter-fill" id="hudComboFill"></div></div>
+    </div>
   </div>
 
-  <!-- center: crosshair / boost ring -->
+  <!-- right: minimap radar -->
+  <div class="hud-right">
+    <div class="radar-frame">
+      <canvas id="radar" width="180" height="180"></canvas>
+      <div class="radar-label">RADAR</div>
+    </div>
+  </div>
+
+  <!-- center: crosshair / boost ring + lock indicator -->
   <div class="hud-center">
     <div class="crosshair">
-      <svg viewBox="0 0 100 100" width="120" height="120">
-        <circle cx="50" cy="50" r="46" stroke="rgba(255,255,255,0.2)" fill="none" stroke-width="1"/>
+      <svg viewBox="0 0 100 100" width="140" height="140">
+        <circle cx="50" cy="50" r="46" stroke="rgba(255,255,255,0.18)" fill="none" stroke-width="1"/>
         <circle cx="50" cy="50" r="46" stroke="#7df9ff" fill="none" stroke-width="2.5"
                 stroke-dasharray="289" stroke-dashoffset="289" id="boostRing"
                 transform="rotate(-90 50 50)"/>
@@ -315,8 +413,15 @@
         <line x1="14" y1="50" x2="24" y2="50" stroke="#7df9ff" stroke-width="2"/>
         <line x1="76" y1="50" x2="86" y2="50" stroke="#7df9ff" stroke-width="2"/>
       </svg>
+      <div class="lock-indicator" id="lockIndicator">LOCK</div>
     </div>
   </div>
+
+  <!-- damage direction indicator (4 sides) -->
+  <div class="dmg-dir up" id="dmgDirUp"></div>
+  <div class="dmg-dir down" id="dmgDirDown"></div>
+  <div class="dmg-dir left" id="dmgDirLeft"></div>
+  <div class="dmg-dir right" id="dmgDirRight"></div>
 
   <!-- bottom hud -->
   <div class="hud-bottom">
@@ -353,6 +458,9 @@
   <!-- floating score popups layer -->
   <div id="scorePopups" class="score-popups"></div>
 
+  <!-- toast (level up / drop / mission) -->
+  <div id="toastLayer" class="toast-layer"></div>
+
   <!-- pause overlay -->
   <div id="pauseOverlay" class="overlay hidden modal">
     <div class="modal-card">
@@ -372,6 +480,7 @@
         <div><span>STAGE</span><b id="goStage">1</b></div>
         <div><span>💎 SALVAGE</span><b id="goSalvage">0</b></div>
         <div><span>KILLS</span><b id="goKills">0</b></div>
+        <div><span>+XP</span><b id="goXp">0</b></div>
       </div>
       <p class="go-note">負けても回収したサルベージは保存され、強化に使えます。</p>
       <button class="primary-btn" id="btnGoHangarFromGO">🛠 強化する</button>
@@ -388,8 +497,10 @@
       <div class="go-stats">
         <div><span>BONUS SCORE</span><b id="scBonusScore">0</b></div>
         <div><span>BONUS 💎</span><b id="scBonusSalvage">0</b></div>
+        <div><span>+XP</span><b id="scBonusXp">0</b></div>
         <div><span>所持 💎</span><b id="scTotalSalvage">0</b></div>
       </div>
+      <div id="scDropBox" class="sc-drop-box hidden"></div>
       <p class="sc-note">次は STAGE <b id="scNextStage">2</b>。強化してから挑むのも◎</p>
       <button class="primary-btn" id="btnContinueStage">次のステージへ</button>
       <button class="ghost-btn" id="btnGoHangarFromSC">🛠 強化してから</button>
