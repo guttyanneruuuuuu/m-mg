@@ -101,7 +101,7 @@ export class InputManager {
     }
   }
   setSimplified(v) {
-    this.simplifiedMode = !!v;
+    this.simplifiedMode = !!v; this.simplifiedDeadzone = 0.60; this.simplifiedSmooth = 0.25;
     Storage.patch({ simplifiedMode: this.simplifiedMode });
   }
   setAutoFireLatch(v) {
@@ -297,14 +297,14 @@ export class InputManager {
       this._handFreshness = lerp(this._handFreshness, 1, 0.18);
 
       // SIMPLIFIED dead-zones make centering easy
-      const dz = this.simplifiedMode ? 0.10 : 0.06;
+      const dz = this.simplifiedMode ? 0.25 : 0.08;
       const dzApply = (v) => Math.abs(v) < dz ? 0 : Math.sign(v) * (Math.abs(v) - dz) / (1 - dz);
       let rRaw = dzApply(h.roll);
       let pRaw = dzApply(h.pitch);
       let yRaw = dzApply(h.yaw);
 
       // gentler curve in simplified mode (k=1.2), stronger in expert (k=1.5)
-      const ck = this.simplifiedMode ? 1.20 : 1.45;
+      const ck = this.simplifiedMode ? 1.50 : 1.45;
 
       r = clamp(curve(rRaw, ck) * 1.5 * k, -1, 1);
       p = clamp(curve(pRaw, ck) * 1.6 * k, -1, 1);

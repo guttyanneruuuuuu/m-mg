@@ -49,12 +49,12 @@
   <div class="title-content">
     <div class="title-tag">
       <span class="title-tag-dot"></span>
-      HAND-TRACKING · SPACE COMBAT · SURVIVOR
+      🖐️ ハンド操作 · 🚀 宇宙戦闘 · 🎮 サバイバー
     </div>
     <h1 class="title-main">
       <span class="logo-glow">STAR</span><span class="logo-accent">FORGE</span>
     </h1>
-    <p class="title-sub">手のひらが操縦桿、敵艦隊を撃ち墜とせ。100ステージで宇宙を制覇せよ。</p>
+    <p class="title-sub">手のひらが操縦桿。敵艦隊を撃ち墜とせ。100ステージで宇宙を制覇しよう。</p>
 
     <div class="title-pilot">
       <div class="title-pilot-avatar"><span id="titlePilotLvlIcon">★</span></div>
@@ -88,12 +88,12 @@
         <div class="mode-icon">✋</div>
         <div class="mode-text">
           <div class="mode-title">ハンド・モード</div>
-          <div class="mode-desc">カメラで手を読み取り操縦・発射 — 没入感 ◎</div>
+          <div class="mode-desc">📱 カメラで手を読み取り操縦・発射 — 没入感 ◎</div>
         </div>
         <div class="mode-arrow">→</div>
       </button>
       <button class="mode-btn" id="btnTouchMode">
-        <div class="mode-icon">📱</div>
+        <div class="mode-icon">🎮</div>
         <div class="mode-text">
           <div class="mode-title">タッチ／キーボード・モード</div>
           <div class="mode-desc">画面ジョイスティック + 発射ボタン</div>
@@ -103,14 +103,14 @@
     </div>
 
     <div class="hint-row">
-      <div class="hint">敵艦撃破で <b>💎サルベージ</b> 獲得 · 機体強化で <b>100ステージクリア</b> へ</div>
-      <div class="hint small">負けても回収したサルベージは保存される（DaDa-Survivor 方式）</div>
+      <div class="hint">💡 <b>かんたんモード</b>で操作が簡単に！敵撃破で <b>💎サルベージ</b> 獲得 · 機体強化で <b>100ステージクリア</b> へ</div>
+      <div class="hint small">✅ 負けても回収したサルベージは保存される（DaDa-Survivor 方式）</div>
     </div>
 
     <div class="footer-row">
       <button class="ghost-btn primary-ghost" id="btnHangar">🛠 格納庫 (HANGAR)</button>
-      <button class="ghost-btn" id="btnHowto">遊び方</button>
-      <button class="ghost-btn" id="btnSettings">設定</button>
+      <button class="ghost-btn" id="btnHowto">❓ 遊び方</button>
+      <button class="ghost-btn" id="btnSettings">⚙️ 設定</button>
     </div>
 
     <div class="title-mini-row" id="titleMiniMissions"></div>
@@ -124,7 +124,7 @@
     <h2>カメラを使います</h2>
     <p class="hand-intro-desc">
       端末のカメラで <b>手の動き・形</b> を読み取り、戦闘機を操縦＆発射します。<br>
-      <span class="hand-intro-privacy">映像は端末内だけで処理され、外部には一切送信されません。</span>
+      <span class="hand-intro-privacy">✅ 映像は端末内だけで処理され、外部には一切送信されません。</span>
     </p>
     <div class="hand-intro-tips">
       <div class="tip"><span>📍</span>明るい場所で、手の全体がカメラに映る位置に</div>
@@ -134,17 +134,17 @@
     </div>
     <label class="hand-intro-toggle">
       <input type="checkbox" id="setSimplifiedIntro" checked>
-      <span><b>かんたんモード</b>（広いデッドゾーン・滑らかな操作）</span>
+      <span><b>✨ かんたんモード</b>（広いデッドゾーン・滑らかな操作）</span>
     </label>
-    <button class="primary-btn" id="btnStartHand">カメラを許可してスタート</button>
-    <button class="ghost-btn" id="btnHandCancel">タッチで遊ぶ</button>
+    <button class="primary-btn" id="btnStartHand">✅ カメラを許可してスタート</button>
+    <button class="ghost-btn" id="btnHandCancel">🎮 タッチで遊ぶ</button>
   </div>
 </div>
 
 <!-- ============== HOW TO ============== -->
 <div id="howtoScreen" class="overlay hidden modal">
   <div class="modal-card">
-    <h2>遊び方</h2>
+    <h2>🎮 遊び方ガイド</h2>
     <div class="howto-grid">
       <div class="howto-item">
         <div class="howto-ico">🛬</div>
@@ -217,14 +217,14 @@
         </div>
       </div>
     </div>
-    <button class="primary-btn" id="btnHowtoClose">了解</button>
+    <button class="primary-btn" id="btnHowtoClose">✅ 了解</button>
   </div>
 </div>
 
 <!-- ============== SETTINGS ============== -->
 <div id="settingsScreen" class="overlay hidden modal">
   <div class="modal-card">
-    <h2>設定</h2>
+    <h2>⚙️ 設定</h2>
     <label class="setting-row">
       <span>グラフィック品質</span>
       <select id="setQuality">
@@ -246,7 +246,7 @@
       <input type="checkbox" id="setMirror" checked>
     </label>
     <label class="setting-row">
-      <span>かんたんモード（操作補正）</span>
+      <span>✨ かんたんモード（操作補正）</span>
       <input type="checkbox" id="setSimplified" checked>
     </label>
     <label class="setting-row">
@@ -267,7 +267,7 @@
       <span>SE</span>
       <input type="range" id="setSfx" min="0" max="1" step="0.05" value="0.7">
     </label>
-    <button class="primary-btn" id="btnSettingsClose">閉じる</button>
+    <button class="primary-btn" id="btnSettingsClose">✅ 閉じる</button>
   </div>
 </div>
 
@@ -324,7 +324,7 @@
 
     <div class="hangar-footer">
       <button class="ghost-btn warn-btn" id="btnHangarReset">セーブをリセット</button>
-      <button class="primary-btn" id="btnHangarClose">閉じる</button>
+      <button class="primary-btn" id="btnHangarClose">✅ 閉じる</button>
     </div>
   </div>
 </div>

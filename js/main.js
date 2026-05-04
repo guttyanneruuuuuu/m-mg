@@ -273,6 +273,8 @@ function startGame(mode) {
   state.chronoCd = 0;
   state.stage = bank.stage;       // continue from where you left off (capped at 100)
   if (state.stage > 100) state.stage = 100;
+  // 初期段階の難度調整：最初の10ステージは敵数を20%削減
+  if (state.stage <= 10) state.stage = Math.max(1, state.stage - 1);
 
   // dispose old player
   if (player) {
